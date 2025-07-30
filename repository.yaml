@@ -1,0 +1,4 @@
+# Home Assistant add-on repository configuration
+name: Barcode Add-on Repository
+url: https://github.com/seelenbrokat/ha-barcode-addon
+maintainer: seelenbrokat
