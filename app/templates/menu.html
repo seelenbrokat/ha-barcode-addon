@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <title>Barcode Add-on – Menü</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f5f7fa;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+    h1 {
+      margin-bottom: 1rem;
+      color: #333;
+    }
+    .menu {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      width: 90%;
+      max-width: 400px;
+    }
+    .menu a {
+      display: block;
+      text-decoration: none;
+      background: #007bff;
+      color: white;
+      padding: 1rem;
+      text-align: center;
+      border-radius: 8px;
+      font-size: 1.2rem;
+      transition: background 0.2s ease;
+    }
+    .menu a:hover {
+      background: #0056b3;
+    }
+  </style>
+</head>
+<body>
+  <h1>Barcode Add-on</h1>
+  <div class="menu">
+    <a href="{{ url_for('status') }}">Status setzen</a>
+    <a href="{{ url_for('info') }}">Sendungsinfo</a>
+    <a href="{{ url_for('settings') }}">Einstellungen</a>
+  </div>
+</body>
+</html>
