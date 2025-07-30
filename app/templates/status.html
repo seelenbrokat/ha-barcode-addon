@@ -1,0 +1,22 @@
+<!-- status.html: page for scanning to update status -->
+<!doctype html>
+<html lang="de">
+<head>
+    <meta charset="utf-8">
+    <title>Status Update</title>
+    <style>
+    body { font-family: sans-serif; margin: 2rem; }
+    #scanner { width: 300px; height: 200px; border: 1px solid #ccc; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <h1>Barcode Status erfassen</h1>
+    <p>Aktueller Zielstatus: {{ status_required }}</p>
+    <form method="post">
+        <label for="barcode">Barcode eingeben oder scannen:</label><br>
+        <input type="text" id="barcode" name="barcode">
+        <button type="submit">Status aktualisieren</button>
+    </form>
+    <p><a href="/">Zurück</a></p>
+</body>
+</html>
