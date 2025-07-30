@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <title>Ergebnis</title>
+  <style>
+    body { font-family: sans-serif; margin: 2rem; }
+    table { border-collapse: collapse; }
+    th, td { padding: 0.4rem 0.8rem; border: 1px solid #ccc; text-align: left; }
+  </style>
+</head>
+<body>
+  <h1>Ergebnis für {{ barcode }}</h1>
+  {% if record %}
+    <table>
+      {% for key, value in record.items() %}
+        <tr><th>{{ key }}</th><td>{{ value }}</td></tr>
+      {% endfor %}
+    </table>
+  {% else %}
+    <p>Keine Daten gefunden.</p>
+  {% endif %}
+  <p><a href="/">Zurück</a></p>
+</body>
+</html>
