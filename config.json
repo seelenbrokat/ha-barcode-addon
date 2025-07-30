@@ -28,7 +28,7 @@
     "ftp_output_dir": "str",
     "status_to_scan": "str"
   },
-  "ports": {
+  "ports": 
     "5000/tcp": 5000
   },
   "ingress": true,
