@@ -1,0 +1,6 @@
+[
+  { "code": "1", "label": "Angekommen" },
+  { "code": "2", "label": "Bearbeitung" },
+  { "code": "3", "label": "Abgeschlossen" },
+  { "code": "4", "label": "Versendet" }
+]
