@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <title>Sendungsinfo</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 0;
+      padding: 1rem;
+      background-color: #f5f7fa;
+    }
+    h1 {
+      margin-top: 0;
+      text-align: center;
+      color: #333;
+    }
+    .container {
+      max-width: 500px;
+      margin: auto;
+      background: white;
+      padding: 1.5rem;
+      border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+    }
+    .messages {
+      margin: 1rem 0;
+    }
+    .messages li {
+      list-style: none;
+      padding: 0.5rem;
+      margin-bottom: 0.5rem;
+      border-radius: 4px;
+    }
+    .error {
+      background-color: #f8d7da;
+      color: #721c24;
+    }
+    input[type="text"], button {
+      width: 100%;
+      padding: 0.6rem;
+      margin: 0.5rem 0;
+      font-size: 1rem;
+    }
+    #scanner-container {
+      width: 100%;
+      height: 250px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      margin-top: 0.5rem;
+      position: relative;
+    }
+    #close-scanner {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      background: rgba(0,0,0,0.6);
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      font-size: 16px;
+      line-height: 24px;
+      cursor: pointer;
+      display: none;
+    }
+    .nav-links {
+      margin-top: 1rem;
+      text-align: center;
+    }
+    .nav-links a {
+      margin-right: 1rem;
+      color: #007bff;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>Sendungsinfo</h1>
+  <div class="container">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <ul class="messages">
+        {% for category, message in messages %}
+          <li class="{{ category }}">{{ message }}</li>
+        {% endfor %}
+        </ul>
+      {% endif %}
+    {% endwith %}
+    <form id="infoForm" method="post">
+      <label for="barcode">Barcode scannen oder manuell eingeben:</label>
+      <input type="text" name="barcode" id="barcode" placeholder="Barcode" required>
+      <div id="scanner-container">
+        <button type="button" id="close-scanner">×</button>
+      </div>
+      <button type="submit">Suchen</button>
+    </form>
+    <div class="nav-links">
+      <a href="{{ url_for('menu') }}">Menü</a>
+      <a href="{{ url_for('settings') }}">Einstellungen</a>
+    </div>
+  </div>
+  <script>
+    const scannerContainer = document.getElementById('scanner-container');
+    const closeBtn = document.getElementById('close-scanner');
+    let scannerStarted = false;
+    function startScanner() {
+      if (scannerStarted) return;
+      Quagga.init({
+        inputStream: {
+          name: "Live",
+          type: "LiveStream",
+          target: scannerContainer,
+          constraints: { facingMode: "environment" }
+        },
+        decoder: { readers: ["ean_reader", "ean_8_reader", "code_128_reader"] }
+      }, function(err) {
+        if (err) { console.error(err); return; }
+        Quagga.start();
+        scannerStarted = true;
+        closeBtn.style.display = 'block';
+      });
+    }
+    function stopScanner() {
+      if (scannerStarted) {
+        Quagga.stop();
+        scannerStarted = false;
+        closeBtn.style.display = 'none';
+      }
+    }
+    // Start scanner automatically when the page loads
+    startScanner();
+    Quagga.onDetected(function(result) {
+      const code = result.codeResult.code;
+      document.getElementById('barcode').value = code;
+      stopScanner();
+      document.getElementById('infoForm').submit();
+    });
+    closeBtn.addEventListener('click', function() {
+      stopScanner();
+    });
+  </script>
+</body>
+</html>
