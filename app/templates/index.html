@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <title>Barcode Scanner</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+  <style>
+    body { font-family: sans-serif; margin: 2rem; }
+    #scanner-container { width: 100%; max-width: 400px; height: 250px; border: 1px solid #ccc; margin-bottom: 1rem; }
+    form input { padding: 0.5rem; font-size: 1rem; width: 300px; }
+    form button { padding: 0.5rem 1rem; font-size: 1rem; }
+  </style>
+</head>
+<body>
+  <h1>SSCC Barcode scannen</h1>
+  <div id="scanner-container"></div>
+  <form method="post">
+    <input type="text" name="barcode" id="barcode" placeholder="Barcode manuell eingeben" required>
+    <button type="submit">Suchen</button>
+  </form>
+  <p><a href="/status">Status-Update</a> | <a href="/settings">Einstellungen</a></p>
+  <script>
+    // Initialisiere QuaggaJS für den Live-Stream
+    Quagga.init({
+      inputStream: {
+        name: "Live",
+        type: "LiveStream",
+        target: document.querySelector('#scanner-container'),
+        constraints: {
+          facingMode: "environment"
+        }
+      },
+      decoder: { readers: ["ean_reader", "ean_8_reader", "code_128_reader"] }
+    }, function (err) {
+      if (err) {
+        console.error(err);
+        return;
+      }
+      Quagga.start();
+    });
+    // Sobald ein Barcode erkannt wurde, fülle das Eingabefeld und sende das Formular
+    Quagga.onDetected(function(result) {
+      var code = result.codeResult.code;
+      document.getElementById('barcode').value = code;
+      Quagga.stop();
+      document.forms[0].submit();
+    });
+  </script>
+</body>
+</html>
