@@ -1,0 +1,23 @@
+<!-- settings.html: page for showing configuration settings -->
+<!doctype html>
+<html lang="de">
+<head>
+    <meta charset="utf-8">
+    <title>Einstellungen</title>
+    <style>
+    body { font-family: sans-serif; margin: 2rem; }
+    table { border-collapse: collapse; margin-top: 1rem; }
+    th, td { padding: 0.4rem 0.8rem; border: 1px solid #ccc; text-align: left; }
+    </style>
+</head>
+<body>
+    <h1>Einstellungen</h1>
+    <table>
+        <tr><th>Option</th><th>Wert</th></tr>
+        {% for key, value in settings.items() %}
+        <tr><td>{{ key }}</td><td>{{ value }}</td></tr>
+        {% endfor %}
+    </table>
+    <p><a href="/">Zurück</a></p>
+</body>
+</html>
