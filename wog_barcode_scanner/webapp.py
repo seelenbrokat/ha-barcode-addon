@@ -1,104 +1,130 @@
 import os
 import logging
-import sys
-from flask import Flask, request, render_template, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 import pymysql
-import traceback
+import json
 
-# -------- LOGGING EINRICHTEN --------
-LOG_DIR = "/data/logs"
-LOG_FILE = os.path.join(LOG_DIR, "webapp.log")
+# --- Logging einrichten ---
+LOG_DIR = "/config/logs"
 os.makedirs(LOG_DIR, exist_ok=True)
+LOG_FILE = os.path.join(LOG_DIR, "webapp.log")
 
-formatter = logging.Formatter('[%(asctime)s] %(levelname)s: %(message)s')
-file_handler = logging.FileHandler(LOG_FILE)
-file_handler.setFormatter(formatter)
-console_handler = logging.StreamHandler(sys.stdout)
-console_handler.setFormatter(formatter)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+    handlers=[
+        logging.FileHandler(LOG_FILE, encoding='utf-8'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
-root_logger = logging.getLogger()
-root_logger.setLevel(logging.INFO)
-root_logger.handlers = []  # Verhindert doppelte Einträge
-root_logger.addHandler(file_handler)
-root_logger.addHandler(console_handler)
+app = Flask(__name__, static_folder='.', template_folder='.')
 
-logging.info("WOG Barcode Scanner Add-on gestartet!")
+# --- MariaDB Verbindung aus config.txt oder config.json ---
+def read_db_config():
+    config_paths = ["/config/config.txt", "/config/config.json"]
+    config = None
+    for path in config_paths:
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    if path.endswith('.json'):
+                        config = json.load(f)
+                    else:
+                        # txt: key=value pro Zeile
+                        config = {}
+                        for line in f:
+                            if '=' in line:
+                                k, v = line.strip().split('=', 1)
+                                config[k.strip()] = v.strip()
+            except Exception as e:
+                logger.error(f"Fehler beim Laden der DB-Konfig aus {path}: {e}", exc_info=True)
+    if not config:
+        logger.error("Keine gültige DB-Konfiguration gefunden.")
+    return config
 
-# -------- FLASK-APP INITIALISIEREN --------
-# "." = aktueller Ordner, in dem webapp.py UND index.html liegen
-app = Flask(__name__, template_folder=".")
-
-# -------- HILFSFUNKTION FÜR DB-CONNECT --------
-def get_db_connection():
+def get_db_conn():
+    cfg = read_db_config()
     try:
-        dbhost = os.environ.get('DB_HOST', 'mariadb')
-        dbuser = os.environ.get('DB_USER', 'root')
-        dbpass = os.environ.get('DB_PASSWORD', 'geheim')
-        dbname = os.environ.get('DB_NAME', 'wareneingang')
         conn = pymysql.connect(
-            host=dbhost,
-            user=dbuser,
-            password=dbpass,
-            database=dbname,
+            host=cfg.get("host"),
+            port=int(cfg.get("port", 3306)),
+            user=cfg.get("user"),
+            password=cfg.get("password"),
+            database=cfg.get("database"),
+            charset="utf8mb4",
             cursorclass=pymysql.cursors.DictCursor
         )
-        logging.info(f"DB-Verbindung zu {dbhost}/{dbname} als {dbuser} erfolgreich.")
         return conn
     except Exception as e:
-        logging.error(f"DB-Verbindung fehlgeschlagen: {e}")
-        logging.error(traceback.format_exc())
-        raise
+        logger.error(f"Fehler beim Verbinden mit der MariaDB: {e}", exc_info=True)
+        return None
 
-# -------- ROUTES --------
-@app.route("/", methods=["GET"])
+# --- Letzte Scans merken (in RAM für Demo, oder TODO: in DB/log) ---
+last_scans = []
+
+# --- Index-Seite (Barcode Web UI) ---
+@app.route("/")
 def index():
-    logging.info("Index-Seite aufgerufen.")
-    try:
-        return render_template("index.html")
-    except Exception as e:
-        logging.error(f"Fehler beim Rendern der Index-Seite: {e}")
-        logging.error(traceback.format_exc())
-        return "Fehler beim Laden der Seite", 500
+    return send_from_directory('.', "index.html")
 
-@app.route("/api/scan", methods=["POST"])
-def scan_barcode():
+# --- API: Barcode scannen ---
+@app.route("/scan", methods=["POST"])
+def scan():
     try:
-        data = request.get_json()
+        data = request.get_json(force=True)
         barcode = data.get("barcode")
-        logging.info(f"Scan-Request: barcode={barcode}")
+        logger.info(f"Scan-Anfrage empfangen für Barcode: {barcode}")
 
-        conn = get_db_connection()
+        conn = get_db_conn()
+        if not conn:
+            logger.error("Keine DB-Verbindung.")
+            return jsonify({"error": "DB-Verbindung fehlgeschlagen"}), 500
+
         with conn.cursor() as cur:
             sql = """
-                SELECT *
+                SELECT *, Quantity AS Colli
                 FROM wareneingang
                 WHERE SSCCs LIKE %s
-                ORDER BY ImportTimestamp DESC
-                LIMIT 1
+                ORDER BY ID DESC LIMIT 1
             """
-            cur.execute(sql, (f"%{barcode}%",))
-            result = cur.fetchone()
-            if not result:
-                logging.warning(f"Barcode {barcode} nicht gefunden.")
-                return jsonify({"status": "not_found", "message": "Barcode nicht gefunden."}), 404
+            like_param = f"%{barcode}%"
+            cur.execute(sql, (like_param,))
+            row = cur.fetchone()
+        conn.close()
 
-            # Colli-Anzahl (Quantity) ermitteln
-            collis = result.get("Quantity", "n/a")
-            logging.info(f"Barcode gefunden: {barcode}, Collis={collis}")
-            return jsonify({"status": "ok", "data": result, "collis": collis}), 200
+        if not row:
+            logger.warning(f"Kein Datensatz für Barcode {barcode} gefunden.")
+            result = {"found": False, "barcode": barcode}
+        else:
+            result = {"found": True, "barcode": barcode, "data": row}
+
+        # Letzten Scan merken (Speicher)
+        last_scans.insert(0, {"barcode": barcode, "result": result})
+        if len(last_scans) > 10:
+            last_scans.pop()
+
+        logger.info(f"Scan-Ergebnis für {barcode}: {result}")
+        return jsonify(result)
     except Exception as e:
-        logging.error(f"Fehler beim Scan: {e}")
-        logging.error(traceback.format_exc())
-        return jsonify({"status": "error", "message": str(e)}), 500
+        logger.error(f"Fehler bei Scan-API: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
 
-# -------- ERROR HANDLING --------
-@app.errorhandler(Exception)
-def handle_exception(e):
-    logging.error(f"Unhandled Exception: {e}")
-    logging.error(traceback.format_exc())
-    return jsonify({"status": "error", "message": str(e)}), 500
+# --- API: Letzte Scans abrufen ---
+@app.route("/last_scans", methods=["GET"])
+def last_scans_api():
+    try:
+        return jsonify(last_scans)
+    except Exception as e:
+        logger.error(f"Fehler bei /last_scans: {e}", exc_info=True)
+        return jsonify([])
 
-# -------- START --------
+# --- Statische Dateien bereitstellen (z.B. index.html) ---
+@app.route('/<path:filename>')
+def serve_static(filename):
+    return send_from_directory('.', filename)
+
+# --- Start ---
 if __name__ == "__main__":
-    logging.info("Flask-Server wird gestartet auf 0.0.0.0:5000")
     app.run(host="0.0.0.0", port=5000)
