@@ -1,6 +1,6 @@
 {
   "name": "Barcode Scanner Addon",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "slug": "ha_barcode_addon",
   "description": "Home Assistant add‑on for scanning SSCC barcodes, retrieving data from MariaDB, and sending status updates as XML via FTP.",
   "arch": ["amd64", "aarch64", "armv7", "armhf", "i386"],

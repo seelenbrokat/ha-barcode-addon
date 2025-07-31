@@ -1,0 +1,15 @@
+# Konfiguration für xml2sql_parser
+[Eingang]
+Pfad1=\\wogdb\Soloplan\Temp_Testserver\Datenbank\Ausgang XML
+Pfad2=\\wogdb\Soloplan\Kommserver\KommServer2\2_WESCAN\Übertragen Homeassistent
+Pfad3=\\wogdb\Soloplan\Temp_Testserver\Datenbank\Ausgang XM1
+
+[Backup]
+Pfad=\\wogdb\Soloplan\Temp_Testserver\Datenbank\Backup
+
+[Database]
+Host=172.16.101.8
+Port=3306
+User=root
+Password=detimk23
+Database=wareneingang
