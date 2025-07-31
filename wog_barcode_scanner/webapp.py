@@ -5,39 +5,13 @@ import pymysql
 import json
 
 # --- Log-Verzeichnis & Datei ---
-LOG_DIR = "/tmp/logs"
+LOG_DIR = "/config/logs"
 os.makedirs(LOG_DIR, exist_ok=True)
 LOG_FILE = os.path.join(LOG_DIR, "webapp.log")
 
-def get_log_level_from_config():
-    config_paths = ["/config/config.txt", "/config/config.json"]
-    for path in config_paths:
-        if os.path.exists(path):
-            try:
-                with open(path, "r", encoding="utf-8") as f:
-                    if path.endswith('.json'):
-                        cfg = json.load(f)
-                        lvl = cfg.get("log_level", "INFO").upper()
-                        if lvl in ["DEBUG","INFO","WARNING","ERROR","CRITICAL"]:
-                            return lvl
-                    else:
-                        # einfache txt config zeile: log_level=DEBUG
-                        for line in f:
-                            if line.lower().startswith("log_level="):
-                                lvl = line.strip().split('=',1)[1].upper()
-                                if lvl in ["DEBUG","INFO","WARNING","ERROR","CRITICAL"]:
-                                    return lvl
-            except Exception as e:
-                # Hier ist noch kein logger, daher nur print
-                print(f"Fehler beim Lesen des Log-Levels aus {path}: {e}")
-    return "INFO"  # Default
-
-# --- Logging-Konfiguration dynamisch ---
-log_level_str = get_log_level_from_config()
-log_level = getattr(logging, log_level_str, logging.INFO)
-
+# --- Logging fest auf DEBUG ---
 logging.basicConfig(
-    level=log_level,
+    level=logging.DEBUG,
     format="%(asctime)s %(levelname)s %(message)s",
     handlers=[
         logging.FileHandler(LOG_FILE, encoding='utf-8'),
@@ -45,7 +19,7 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
-logger.info(f"Starte Webapp mit Logging-Level: {log_level_str}")
+logger.debug("Starte Webapp mit LOG-Level DEBUG (maximal).")
 
 app = Flask(__name__, static_folder='.', template_folder='.')
 
@@ -58,14 +32,14 @@ def read_db_config():
                 with open(path, "r", encoding="utf-8") as f:
                     if path.endswith('.json'):
                         config = json.load(f)
-                        logger.info(f"DB-Konfig aus JSON geladen: {path}")
+                        logger.debug(f"DB-Konfig aus JSON geladen: {path}")
                     else:
                         config = {}
                         for line in f:
                             if '=' in line:
                                 k, v = line.strip().split('=', 1)
                                 config[k.strip()] = v.strip()
-                        logger.info(f"DB-Konfig aus TXT geladen: {path}")
+                        logger.debug(f"DB-Konfig aus TXT geladen: {path}")
                 break
             except Exception as e:
                 logger.error(f"Fehler beim Laden der DB-Konfig aus {path}: {e}", exc_info=True)
@@ -79,6 +53,12 @@ def get_db_conn():
         logger.error("DB-Konfiguration fehlt oder ungültig.")
         return None
 
+    required_keys = ["host", "user", "password", "database"]
+    missing_keys = [k for k in required_keys if not cfg.get(k)]
+    if missing_keys:
+        logger.error(f"DB-Konfiguration unvollständig, fehlende Schlüssel: {missing_keys}")
+        return None
+
     try:
         conn = pymysql.connect(
             host=cfg.get("host"),
@@ -90,7 +70,7 @@ def get_db_conn():
             cursorclass=pymysql.cursors.DictCursor,
             connect_timeout=5
         )
-        logger.info("Erfolgreich mit der MariaDB verbunden.")
+        logger.debug("Erfolgreich mit der MariaDB verbunden.")
         return conn
     except Exception as e:
         logger.error(f"Fehler beim Verbinden mit der MariaDB: {e}", exc_info=True)
@@ -100,15 +80,17 @@ last_scans = []
 
 @app.route("/")
 def index():
-    logger.info("Index-Seite angefordert.")
+    logger.debug("Index-Seite angefordert.")
     return send_from_directory('.', "index.html")
 
 @app.route("/scan", methods=["POST"])
 def scan():
     try:
         data = request.get_json(force=True)
-        barcode = data.get("barcode")
-        logger.info(f"Scan-Anfrage empfangen für Barcode: {barcode}")
+        logger.debug(f"Scan-Request Daten: {data}")
+
+        barcode = data.get("barcode") if data else None
+        logger.debug(f"Scan-Anfrage empfangen für Barcode: {barcode}")
 
         if not barcode:
             logger.warning("Kein Barcode im Request gefunden.")
@@ -141,7 +123,7 @@ def scan():
         if len(last_scans) > 10:
             last_scans.pop()
 
-        logger.info(f"Scan-Ergebnis für '{barcode}': {result}")
+        logger.debug(f"Scan-Ergebnis für '{barcode}': {result}")
         return jsonify(result)
     except Exception as e:
         logger.error(f"Fehler bei Scan-API: {e}", exc_info=True)
@@ -150,7 +132,7 @@ def scan():
 @app.route("/last_scans", methods=["GET"])
 def last_scans_api():
     try:
-        logger.info("Letzte Scans angefragt.")
+        logger.debug("Letzte Scans angefragt.")
         return jsonify(last_scans)
     except Exception as e:
         logger.error(f"Fehler bei /last_scans: {e}", exc_info=True)
@@ -158,9 +140,9 @@ def last_scans_api():
 
 @app.route('/<path:filename>')
 def serve_static(filename):
-    logger.info(f"Statische Datei angefragt: {filename}")
+    logger.debug(f"Statische Datei angefragt: {filename}")
     return send_from_directory('.', filename)
 
 if __name__ == "__main__":
-    logger.info("Starte Flask Webserver...")
+    logger.debug("Starte Flask Webserver...")
     app.run(host="0.0.0.0", port=5000)
