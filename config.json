@@ -1,18 +1,23 @@
 {
-  "name": "Barcode Scanner Addon",
-  "version": "1.0.9",
-  "slug": "ha_barcode_addon",
-  "...": "...",
+  "name": "WOG Barcode Scanner",
+  "version": "1.0.10",
+  "slug": "wog_barcode_scanner",
+  "description": "Barcode-Scan Add-on für Wareneingang mit MariaDB-Anbindung.",
+  "startup": "application",
   "ingress": true,
-  "ingress_port": 5000,
+  "panel_icon": "mdi:barcode-scan",
+  "panel_title": "WOG Barcode",
+  "ports": {
+    "5000/tcp": null
+  },
   "options": {
     "db_host": "mariadb",
     "db_port": 3306,
     "db_user": "root",
     "db_password": "password",
     "db_name": "homeassistant",
-    "db_table": "shipments",
-    "sscc_column": "sscc"
+    "db_table": "wareneingang",
+    "sscc_column": "SSCCs"
   },
   "schema": {
     "db_host": "str",
@@ -23,5 +28,10 @@
     "db_table": "str",
     "sscc_column": "str"
   },
-  "...": "..."
+  "arch": [
+    "amd64",
+    "aarch64",
+    "armv7"
+  ],
+  "image": null
 }
