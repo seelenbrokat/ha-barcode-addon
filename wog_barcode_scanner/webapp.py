@@ -1,27 +1,30 @@
 import os
 import logging
-from flask import Flask, request, jsonify, send_from_directory
+from logging.handlers import RotatingFileHandler
+from flask import Flask, request, jsonify, send_from_directory, abort
 import pymysql
 import json
 
-# --- Logging einrichten ---
+# --- Logging Setup ---
 LOG_DIR = "/config/logs"
-os.makedirs(LOG_DIR, exist_ok=True)
 LOG_FILE = os.path.join(LOG_DIR, "webapp.log")
+os.makedirs(LOG_DIR, exist_ok=True)
 
+handler = RotatingFileHandler(LOG_FILE, maxBytes=1_000_000, backupCount=5, encoding='utf-8')
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(message)s",
     handlers=[
-        logging.FileHandler(LOG_FILE, encoding='utf-8'),
+        handler,
         logging.StreamHandler()
     ]
 )
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("webapp")
+logger.info("WebApp gestartet. Logging läuft!")
 
 app = Flask(__name__, static_folder='.', template_folder='.')
 
-# --- MariaDB Verbindung aus config.txt oder config.json ---
+# --- Config lesen ---
 def read_db_config():
     config_paths = ["/config/config.txt", "/config/config.json"]
     config = None
@@ -32,12 +35,12 @@ def read_db_config():
                     if path.endswith('.json'):
                         config = json.load(f)
                     else:
-                        # txt: key=value pro Zeile
                         config = {}
                         for line in f:
                             if '=' in line:
                                 k, v = line.strip().split('=', 1)
                                 config[k.strip()] = v.strip()
+                logger.info(f"Konfig geladen: {path}")
             except Exception as e:
                 logger.error(f"Fehler beim Laden der DB-Konfig aus {path}: {e}", exc_info=True)
     if not config:
@@ -56,18 +59,23 @@ def get_db_conn():
             charset="utf8mb4",
             cursorclass=pymysql.cursors.DictCursor
         )
+        logger.info("Erfolgreich mit MariaDB verbunden")
         return conn
     except Exception as e:
-        logger.error(f"Fehler beim Verbinden mit der MariaDB: {e}", exc_info=True)
+        logger.error(f"Fehler beim Verbinden mit MariaDB: {e}", exc_info=True)
         return None
 
-# --- Letzte Scans merken (in RAM für Demo, oder TODO: in DB/log) ---
 last_scans = []
 
 # --- Index-Seite (Barcode Web UI) ---
 @app.route("/")
 def index():
-    return send_from_directory('.', "index.html")
+    try:
+        logger.info("Indexseite angefragt")
+        return send_from_directory('.', "index.html")
+    except Exception as e:
+        logger.error(f"Fehler beim Bereitstellen von index.html: {e}", exc_info=True)
+        return abort(500, description="index.html fehlt oder nicht lesbar")
 
 # --- API: Barcode scannen ---
 @app.route("/scan", methods=["POST"])
@@ -75,11 +83,11 @@ def scan():
     try:
         data = request.get_json(force=True)
         barcode = data.get("barcode")
-        logger.info(f"Scan-Anfrage empfangen für Barcode: {barcode}")
+        logger.info(f"Scan-Anfrage: {barcode}")
 
         conn = get_db_conn()
         if not conn:
-            logger.error("Keine DB-Verbindung.")
+            logger.error("DB-Verbindung fehlgeschlagen.")
             return jsonify({"error": "DB-Verbindung fehlgeschlagen"}), 500
 
         with conn.cursor() as cur:
@@ -100,12 +108,10 @@ def scan():
         else:
             result = {"found": True, "barcode": barcode, "data": row}
 
-        # Letzten Scan merken (Speicher)
         last_scans.insert(0, {"barcode": barcode, "result": result})
         if len(last_scans) > 10:
             last_scans.pop()
-
-        logger.info(f"Scan-Ergebnis für {barcode}: {result}")
+        logger.info(f"Scan-Ergebnis: {result}")
         return jsonify(result)
     except Exception as e:
         logger.error(f"Fehler bei Scan-API: {e}", exc_info=True)
@@ -120,11 +126,15 @@ def last_scans_api():
         logger.error(f"Fehler bei /last_scans: {e}", exc_info=True)
         return jsonify([])
 
-# --- Statische Dateien bereitstellen (z.B. index.html) ---
+# --- Statische Dateien bereitstellen ---
 @app.route('/<path:filename>')
 def serve_static(filename):
-    return send_from_directory('.', filename)
+    try:
+        return send_from_directory('.', filename)
+    except Exception as e:
+        logger.error(f"Fehler beim Bereitstellen von {filename}: {e}", exc_info=True)
+        return abort(404, description=f"{filename} fehlt")
 
-# --- Start ---
 if __name__ == "__main__":
+    logger.info("Webapp wird gestartet...")
     app.run(host="0.0.0.0", port=5000)
