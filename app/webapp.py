@@ -1,30 +1,21 @@
 from flask import Flask, request, jsonify, send_from_directory
 import pymysql
-import configparser
 import os
 
-app = Flask(__name__, static_folder=".", static_url_path="")  # "." = aktuelles Verzeichnis
-
-def get_config():
-    config = configparser.ConfigParser()
-    config.read(os.path.join(os.path.dirname(__file__), 'config.txt'))
-    return config
+app = Flask(__name__, static_folder=".", static_url_path="")
 
 def get_db_connection():
-    config = get_config()
-    dbconf = config['Database']
     return pymysql.connect(
-        host=dbconf.get('Host'),
-        port=int(dbconf.get('Port', 3306)),
-        user=dbconf.get('User'),
-        password=dbconf.get('Password'),
-        database=dbconf.get('Database'),
+        host=os.environ.get("DB_HOST", "localhost"),
+        port=int(os.environ.get("DB_PORT", 3306)),
+        user=os.environ.get("DB_USER", "root"),
+        password=os.environ.get("DB_PASSWORD", ""),
+        database=os.environ.get("DB_NAME", "homeassistant"),
         cursorclass=pymysql.cursors.DictCursor
     )
 
 @app.route("/")
 def home():
-    # Liefert die index.html direkt aus dem aktuellen Verzeichnis
     return send_from_directory(app.static_folder, "index.html")
 
 @app.route("/api/scan")
@@ -34,8 +25,10 @@ def api_scan():
         return jsonify({"found": False})
     conn = get_db_connection()
     try:
+        table = os.environ.get("DB_TABLE", "shipments")
+        sscc_col = os.environ.get("SSCC_COLUMN", "sscc")
+        sql = f"SELECT Recipient, DeliveryDate, OrderNumber, Quantity FROM {table} WHERE {sscc_col} = %s LIMIT 1"
         with conn.cursor() as cur:
-            sql = "SELECT Recipient, DeliveryDate, OrderNumber, Quantity FROM wareneingang WHERE SSCCs = %s LIMIT 1"
             cur.execute(sql, (barcode,))
             row = cur.fetchone()
             if row:

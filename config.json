@@ -1,11 +1,10 @@
 {
   "name": "Barcode Scanner Addon",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "slug": "ha_barcode_addon",
-  "description": "Home Assistant add‑on for scanning SSCC barcodes, retrieving data from MariaDB, and sending status updates as XML via FTP.",
-  "arch": ["amd64", "aarch64", "armv7", "armhf", "i386"],
-  "startup": "application",
-  "boot": "auto",
+  "...": "...",
+  "ingress": true,
+  "ingress_port": 5000,
   "options": {
     "db_host": "mariadb",
     "db_port": 3306,
@@ -13,9 +12,7 @@
     "db_password": "password",
     "db_name": "homeassistant",
     "db_table": "shipments",
-    "sscc_column": "sscc",
-    "ftp_output_dir": "/share/barcode_status",
-    "status_to_scan": "delivered"
+    "sscc_column": "sscc"
   },
   "schema": {
     "db_host": "str",
@@ -24,17 +21,7 @@
     "db_password": "str",
     "db_name": "str",
     "db_table": "str",
-    "sscc_column": "str",
-    "ftp_output_dir": "str",
-    "status_to_scan": "str"
+    "sscc_column": "str"
   },
-  "ports": {
-    "5000/tcp": 5000
-  },
-  "ingress": true,
-  "ingress_port": 5000,
-  "panel_icon": "mdi:barcode-scan",
-  "panel_title": "Barcode Scanner",
-  "init": false
+  "...": "..."
 }
-
