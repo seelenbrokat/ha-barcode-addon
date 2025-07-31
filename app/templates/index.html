@@ -1,50 +1,116 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="de">
 <head>
-  <meta charset="utf-8">
-  <title>Barcode Scanner</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+  <meta charset="UTF-8">
+  <title>WOG Hallenscan</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    body { font-family: sans-serif; margin: 2rem; }
-    #scanner-container { width: 100%; max-width: 400px; height: 250px; border: 1px solid #ccc; margin-bottom: 1rem; }
-    form input { padding: 0.5rem; font-size: 1rem; width: 300px; }
-    form button { padding: 0.5rem 1rem; font-size: 1rem; }
+    body { font-family: system-ui,sans-serif; background: #f3f9f4; margin: 0; }
+    header { background: #21b573; color: #fff; padding: 1.4rem 1rem 1rem 1rem; text-align: center; border-bottom-left-radius: 1.5rem; border-bottom-right-radius: 1.5rem;}
+    .container { max-width: 390px; margin: 2.2rem auto; padding: 2.1rem 1.2rem 2rem 1.2rem; background: #fff; border-radius: 1.6rem; box-shadow: 0 4px 20px #0001;}
+    .mode { background: #eafbf2; color: #18965a; font-size: 1.18rem; text-align: center; border-radius: 0.7rem; margin-bottom: 1.4rem; padding: 0.6rem 0;}
+    .bigscan { background: #21b573; color: #fff; font-size: 2.0rem; font-weight: bold; border-radius: 1.5rem; padding: 1.6rem 0; border: none; width: 100%; margin-bottom: 1.1rem; box-shadow: 0 1px 12px #21b57333; cursor: pointer; transition: background 0.18s;}
+    .bigscan:active { background: #18965a; }
+    .input-row { margin-bottom: 1.4rem;}
+    .status-ok { background: #eafbf2; color: #18965a; border-left: 7px solid #21b573; padding: 1rem; border-radius: 1rem; font-size: 1.13rem;}
+    .status-error { background: #fff3f4; color: #ba2121; border-left: 7px solid #e74c3c; padding: 1rem; border-radius: 1rem; font-size: 1.13rem;}
+    .lastscans { margin-top: 2.1rem;}
+    .scanlist { list-style: none; margin: 0; padding: 0;}
+    .scanitem { padding: 0.7rem 0.7rem 0.7rem 1rem; border-bottom: 1px solid #eee; font-size: 1rem;}
+    .scanitem.ok { color: #21b573;}
+    .scanitem.fail { color: #e74c3c;}
+    .input-fallback { margin: 1.1rem 0 0.7rem 0; }
+    input[type="text"] { width: 100%; padding: 1.1rem; border-radius: 1rem; border: 1.5px solid #cdeede; font-size: 1.15rem;}
+    select, label, input[type="checkbox"] { margin-top:1rem; margin-bottom: 1rem;}
+    @media (max-width:500px) {
+      .container { padding: 1.0rem 0.1rem 1.2rem 0.1rem; }
+      header { padding: 1rem 0.2rem 0.6rem 0.2rem; }
+    }
   </style>
 </head>
 <body>
-  <h1>SSCC Barcode scannen</h1>
-  <div id="scanner-container"></div>
-  <form method="post">
-    <input type="text" name="barcode" id="barcode" placeholder="Barcode manuell eingeben" required>
-    <button type="submit">Suchen</button>
-  </form>
-  <p><a href="/status">Status-Update</a> | <a href="/settings">Einstellungen</a></p>
+  <header>
+    <h2>WOG Hallenscan</h2>
+    <div style="font-size:1rem; font-weight:400;">Modus: Wareneingang Halle 2</div>
+  </header>
+  <div class="container">
+    <div class="mode">
+      Wareneingang · <span style="font-weight:700;">Halle 2</span>
+    </div>
+    <form id="scanForm" onsubmit="scanBarcode(); return false;">
+      <button type="button" class="bigscan" onclick="scanBarcode()">Barcode SCANNEN</button>
+      <div class="input-fallback">
+        <input type="text" id="barcodeInput" placeholder="...oder Barcode manuell eingeben" autocomplete="off">
+      </div>
+      <div style="margin-bottom:1rem;">
+        <label for="statusSelect">Status:</label>
+        <select id="statusSelect">
+          <option>Hallenscan</option>
+          <option>Warenausgang</option>
+          <option>Retoure</option>
+        </select>
+      </div>
+      <label><input type="checkbox" id="transmitXml" /> Scan übertragen</label>
+    </form>
+    <div id="scanStatus" class="status-ok" style="display:none;"></div>
+    <div class="lastscans">
+      <b>Letzte Scans:</b>
+      <ul class="scanlist" id="lastScans"></ul>
+    </div>
+  </div>
   <script>
-    // Initialisiere QuaggaJS für den Live-Stream
-    Quagga.init({
-      inputStream: {
-        name: "Live",
-        type: "LiveStream",
-        target: document.querySelector('#scanner-container'),
-        constraints: {
-          facingMode: "environment"
-        }
-      },
-      decoder: { readers: ["ean_reader", "ean_8_reader", "code_128_reader"] }
-    }, function (err) {
-      if (err) {
-        console.error(err);
+    // Für Demo: letzte Scans im LocalStorage
+    const scanlist = JSON.parse(localStorage.getItem("lastScans") || "[]");
+    const lastScansEl = document.getElementById("lastScans");
+    function renderLastScans() {
+      lastScansEl.innerHTML = scanlist.map(
+        s => `<li class="scanitem ${s.status}">${s.barcode} · ${s.empfaenger || "-"} · <b>${s.status === "ok" ? "OK" : "FEHLER"}</b></li>`
+      ).join("");
+    }
+    renderLastScans();
+
+    async function scanBarcode() {
+      const barcode = document.getElementById('barcodeInput').value.trim();
+      if (!barcode) {
+        showStatus("Bitte Barcode eingeben!", false);
         return;
       }
-      Quagga.start();
-    });
-    // Sobald ein Barcode erkannt wurde, fülle das Eingabefeld und sende das Formular
-    Quagga.onDetected(function(result) {
-      var code = result.codeResult.code;
-      document.getElementById('barcode').value = code;
-      Quagga.stop();
-      document.forms[0].submit();
-    });
+      // API-Aufruf zum Backend (hier: /api/scan?barcode=...)
+      try {
+        const resp = await fetch(`/api/scan?barcode=${encodeURIComponent(barcode)}`);
+        if (!resp.ok) throw new Error("Scan-Fehler");
+        const data = await resp.json();
+        if (data.found) {
+          showStatus(
+            `<b>Scan erfolgreich!</b><br>
+            SSCC: <span style="font-family:monospace;">${barcode}</span><br>
+            Empfänger: ${data.Recipient}<br>
+            Lieferdatum: ${data.DeliveryDate}<br>
+            Auftrag: ${data.OrderNumber}<br>
+            Colli: ${data.Quantity}`, true
+          );
+          scanlist.unshift({barcode, empfaenger: data.Recipient, status:"ok"});
+        } else {
+          showStatus(
+            `<b>Unbekannter Barcode!</b><br>Bitte erneut versuchen oder Barcode prüfen.`, false
+          );
+          scanlist.unshift({barcode, status:"fail"});
+        }
+        // Maximal 10 Scans speichern
+        localStorage.setItem("lastScans", JSON.stringify(scanlist.slice(0,10)));
+        renderLastScans();
+      } catch (e) {
+        showStatus("Server nicht erreichbar!", false);
+      }
+      document.getElementById('barcodeInput').value = "";
+    }
+
+    function showStatus(html, ok) {
+      const el = document.getElementById('scanStatus');
+      el.style.display = "block";
+      el.className = ok ? "status-ok" : "status-error";
+      el.innerHTML = html;
+    }
   </script>
 </body>
 </html>
