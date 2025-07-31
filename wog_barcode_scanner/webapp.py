@@ -9,9 +9,9 @@ LOG_DIR = "/tmp/logs"
 os.makedirs(LOG_DIR, exist_ok=True)
 LOG_FILE = os.path.join(LOG_DIR, "webapp.log")
 
-# Logging auf DEBUG (maximal)
+# --- Logging Setup ---
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.DEBUG,  # Maximal: DEBUG
     format="%(asctime)s %(levelname)s %(message)s",
     handlers=[
         logging.FileHandler(LOG_FILE, encoding='utf-8'),
@@ -23,66 +23,60 @@ logger.debug("Starte Webapp mit LOG-Level DEBUG (maximal).")
 
 app = Flask(__name__, static_folder='.', template_folder='.')
 
+# --- DB Konfiguration aus JSON (Standard Pfad) ---
 def read_db_config():
-    config_paths = ["/config/config.json", "/config/config.txt"]
-    config = None
-    for path in config_paths:
-        if os.path.exists(path):
-            try:
-                with open(path, "r", encoding="utf-8") as f:
-                    if path.endswith('.json'):
-                        config = json.load(f)
-                        logger.info(f"DB-Konfig aus JSON geladen: {path}")
-                    else:
-                        config = {}
-                        for line in f:
-                            if '=' in line:
-                                k, v = line.strip().split('=', 1)
-                                config[k.strip()] = v.strip()
-                        logger.info(f"DB-Konfig aus TXT geladen: {path}")
-                break
-            except Exception as e:
-                logger.error(f"Fehler beim Laden der DB-Konfig aus {path}: {e}", exc_info=True)
-    if not config:
-        logger.error("Keine gültige DB-Konfiguration gefunden.")
-    return config
+    config_path = "/config/config.json"
+    if not os.path.exists(config_path):
+        logger.error(f"DB-Konfigdatei nicht gefunden unter {config_path}")
+        return None
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = json.load(f)
+            logger.debug(f"DB-Konfig geladen aus {config_path}: {config}")
+            return config
+    except Exception as e:
+        logger.error(f"Fehler beim Laden der DB-Konfiguration: {e}", exc_info=True)
+        return None
 
+# --- DB Verbindung ---
 def get_db_conn():
     cfg = read_db_config()
     if not cfg:
         logger.error("DB-Konfiguration fehlt oder ungültig.")
         return None
-
     try:
         conn = pymysql.connect(
-            host=cfg.get("db_host") or cfg.get("host"),
-            port=int(cfg.get("db_port", cfg.get("port", 3306))),
-            user=cfg.get("db_user") or cfg.get("user"),
-            password=cfg.get("db_password") or cfg.get("password"),
-            database=cfg.get("db_name") or cfg.get("database"),
+            host=cfg.get("db_host"),
+            port=int(cfg.get("db_port", 3306)),
+            user=cfg.get("db_user"),
+            password=cfg.get("db_password"),
+            database=cfg.get("db_name"),
             charset="utf8mb4",
             cursorclass=pymysql.cursors.DictCursor,
             connect_timeout=5
         )
-        logger.info("Erfolgreich mit der MariaDB verbunden.")
+        logger.debug("Erfolgreich mit der MariaDB verbunden.")
         return conn
     except Exception as e:
         logger.error(f"Fehler beim Verbinden mit der MariaDB: {e}", exc_info=True)
         return None
 
+# --- Letzte Scans im Speicher ---
 last_scans = []
 
+# --- Index-Seite ---
 @app.route("/")
 def index():
     logger.info("Index-Seite angefordert.")
     return send_from_directory('.', "index.html")
 
+# --- Scan-API ---
 @app.route("/scan", methods=["POST"])
 def scan():
     try:
         data = request.get_json(force=True)
         barcode = data.get("barcode")
-        logger.info(f"Scan-Anfrage empfangen für Barcode: {barcode}")
+        logger.debug(f"Scan-Anfrage empfangen mit Barcode: {barcode}")
 
         if not barcode:
             logger.warning("Kein Barcode im Request gefunden.")
@@ -94,19 +88,23 @@ def scan():
             return jsonify({"error": "DB-Verbindung fehlgeschlagen"}), 500
 
         with conn.cursor() as cur:
-            sql = """
+            table = read_db_config().get("db_table", "wareneingang")
+            sscc_column = read_db_config().get("sscc_column", "SSCCs")
+
+            sql = f"""
                 SELECT *, Quantity AS Colli
-                FROM wareneingang
-                WHERE SSCCs LIKE %s
+                FROM {table}
+                WHERE {sscc_column} LIKE %s
                 ORDER BY ID DESC LIMIT 1
             """
             like_param = f"%{barcode}%"
+            logger.debug(f"SQL-Abfrage: {sql} mit Param: {like_param}")
             cur.execute(sql, (like_param,))
             row = cur.fetchone()
         conn.close()
 
         if not row:
-            logger.warning(f"Kein Datensatz für Barcode '{barcode}' gefunden.")
+            logger.info(f"Kein Datensatz für Barcode '{barcode}' gefunden.")
             result = {"found": False, "barcode": barcode}
         else:
             result = {"found": True, "barcode": barcode, "data": row}
@@ -115,44 +113,27 @@ def scan():
         if len(last_scans) > 10:
             last_scans.pop()
 
-        logger.info(f"Scan-Ergebnis für '{barcode}': {result}")
+        logger.debug(f"Scan-Ergebnis: {result}")
         return jsonify(result)
     except Exception as e:
         logger.error(f"Fehler bei Scan-API: {e}", exc_info=True)
         return jsonify({"error": "Interner Serverfehler"}), 500
 
+# --- API letzte Scans ---
 @app.route("/last_scans", methods=["GET"])
 def last_scans_api():
     try:
-        logger.info("Letzte Scans angefragt.")
+        logger.debug("Letzte Scans angefragt.")
         return jsonify(last_scans)
     except Exception as e:
         logger.error(f"Fehler bei /last_scans: {e}", exc_info=True)
         return jsonify([])
 
+# --- Statische Dateien (index.html, CSS, JS, etc) ---
 @app.route('/<path:filename>')
 def serve_static(filename):
-    logger.info(f"Statische Datei angefragt: {filename}")
+    logger.debug(f"Statische Datei angefragt: {filename}")
     return send_from_directory('.', filename)
-
-# --- Neu: Test-Endpunkt für DB-Verbindung ---
-@app.route("/db_test", methods=["GET"])
-def db_test():
-    logger.info("DB-Test-Endpunkt aufgerufen.")
-    conn = get_db_conn()
-    if not conn:
-        logger.error("DB-Test: Verbindung fehlgeschlagen.")
-        return jsonify({"status": "error", "message": "Keine Verbindung zur Datenbank"}), 500
-    try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT NOW() AS current_time")
-            row = cur.fetchone()
-        conn.close()
-        logger.info(f"DB-Test erfolgreich: Serverzeit {row['current_time']}")
-        return jsonify({"status": "success", "server_time": str(row['current_time'])})
-    except Exception as e:
-        logger.error(f"DB-Test: Fehler bei Query: {e}", exc_info=True)
-        return jsonify({"status": "error", "message": "Fehler bei der DB-Abfrage"}), 500
 
 if __name__ == "__main__":
     logger.info("Starte Flask Webserver...")
