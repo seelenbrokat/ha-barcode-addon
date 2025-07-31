@@ -2,109 +2,100 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8" />
-  <title>WOG Barcode Scanner</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WOG Barcode Scanner</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 2rem; background: #f9f9f9; }
-    input[type="text"] { padding: 0.5rem; width: 300px; font-size: 1rem; }
-    button { padding: 0.5rem 1rem; font-size: 1rem; margin-left: 0.5rem; }
-    .result, .last-scans { margin-top: 1rem; padding: 1rem; background: white; border-radius: 6px; box-shadow: 0 0 4px rgba(0,0,0,0.1); }
-    .last-scans div { border-bottom: 1px solid #eee; padding: 0.5rem 0; }
-    .last-scans div:last-child { border-bottom: none; }
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 400px;
+      margin: 2rem auto;
+      background-color: #f9f9f9;
+      padding: 1rem;
+      border-radius: 8px;
+      box-shadow: 0 0 10px #ddd;
+    }
+    h1 {
+      text-align: center;
+      color: #333;
+    }
+    label {
+      font-weight: bold;
+      display: block;
+      margin-top: 1rem;
+    }
+    input[type="text"] {
+      width: 100%;
+      padding: 0.5rem;
+      font-size: 1rem;
+      margin-top: 0.25rem;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    button {
+      margin-top: 1rem;
+      width: 100%;
+      padding: 0.75rem;
+      background-color: #0078d7;
+      color: white;
+      font-size: 1rem;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #005fa3;
+    }
+    .result {
+      margin-top: 1.5rem;
+      padding: 1rem;
+      background-color: #e7f3ff;
+      border-radius: 4px;
+      white-space: pre-wrap;
+      font-family: monospace;
+    }
   </style>
 </head>
 <body>
+  <h1>WOG Barcode Scanner</h1>
+  <label for="barcodeInput">Barcode eingeben:</label>
+  <input type="text" id="barcodeInput" placeholder="Barcode hier eingeben" />
+  <button id="scanBtn">Scannen</button>
+  <div class="result" id="result"></div>
 
-<h1>WOG Barcode Scanner</h1>
+  <script>
+    const scanBtn = document.getElementById("scanBtn");
+    const barcodeInput = document.getElementById("barcodeInput");
+    const resultDiv = document.getElementById("result");
 
-<label for="barcode-input">Barcode scannen oder eingeben:</label><br />
-<input type="text" id="barcode-input" autocomplete="off" />
-<button id="scan-btn">Scannen</button>
-
-<div class="result" id="result"></div>
-
-<h2>Letzte Scans</h2>
-<div class="last-scans" id="last-scans"></div>
-
-<script>
-  async function scanBarcode(barcode) {
-    if (!barcode) return;
-
-    const resultDiv = document.getElementById('result');
-    resultDiv.textContent = 'Lade...';
-
-    try {
-      const response = await fetch('/scan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ barcode })
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        resultDiv.textContent = 'Fehler: ' + (error.error || 'Unbekannter Fehler');
+    scanBtn.addEventListener("click", () => {
+      const barcode = barcodeInput.value.trim();
+      if (!barcode) {
+        resultDiv.textContent = "Bitte einen Barcode eingeben.";
         return;
       }
+      resultDiv.textContent = "Suche...";
 
-      const data = await response.json();
-
-      if (!data.found) {
-        resultDiv.textContent = `Kein Datensatz für Barcode "${barcode}" gefunden.`;
-        return;
-      }
-
-      const d = data.data || {};
-      resultDiv.innerHTML = `
-        <strong>Barcode:</strong> ${barcode}<br />
-        <strong>Empfänger:</strong> ${d.Recipient || d.EmpfName1 || 'n/a'}<br />
-        <strong>Lieferdatum:</strong> ${d.DeliveryDate || 'n/a'}<br />
-        <strong>Auftragsnummer:</strong> ${d.OrderNumber || d.TransportOrderNumber || 'n/a'}<br />
-        <strong>Menge:</strong> ${d.Quantity || d.Colli || 'n/a'}
-      `;
-
-      loadLastScans();
-
-    } catch (err) {
-      resultDiv.textContent = 'Fehler beim Scannen: ' + err.message;
-    }
-  }
-
-  async function loadLastScans() {
-    const lastScansDiv = document.getElementById('last-scans');
-    try {
-      const response = await fetch('/last_scans');
-      if (!response.ok) throw new Error('Fehler beim Laden der letzten Scans');
-      const lastScans = await response.json();
-
-      if (!lastScans.length) {
-        lastScansDiv.textContent = 'Noch keine Scans vorhanden.';
-        return;
-      }
-
-      lastScansDiv.innerHTML = '';
-      lastScans.forEach(scan => {
-        const b = scan.barcode;
-        const found = scan.result.found ? '✔️' : '❌';
-        lastScansDiv.innerHTML += `<div>${found} Barcode: <strong>${b}</strong></div>`;
-      });
-    } catch {
-      lastScansDiv.textContent = 'Fehler beim Laden der letzten Scans.';
-    }
-  }
-
-  document.getElementById('scan-btn').addEventListener('click', () => {
-    const barcode = document.getElementById('barcode-input').value.trim();
-    scanBarcode(barcode);
-  });
-
-  document.getElementById('barcode-input').addEventListener('keyup', (e) => {
-    if (e.key === 'Enter') {
-      scanBarcode(e.target.value.trim());
-    }
-  });
-
-  window.onload = loadLastScans;
-</script>
-
+      fetch(`/api/scan?barcode=${encodeURIComponent(barcode)}`)
+        .then((response) => {
+          if (!response.ok) throw new Error("Fehler bei der Anfrage");
+          return response.json();
+        })
+        .then((data) => {
+          if (data.found) {
+            resultDiv.textContent =
+              `Barcode: ${data.barcode}\n` +
+              `Empfänger: ${data.Recipient || "-"}\n` +
+              `Lieferdatum: ${data.DeliveryDate || "-"}\n` +
+              `Auftrag: ${data.OrderNumber || "-"}\n` +
+              `Menge: ${data.Quantity || "-"}`;
+          } else {
+            resultDiv.textContent = `Kein Datensatz für Barcode ${data.barcode} gefunden.`;
+          }
+        })
+        .catch((err) => {
+          resultDiv.textContent = "Fehler beim Scannen: " + err.message;
+        });
+    });
+  </script>
 </body>
 </html>
