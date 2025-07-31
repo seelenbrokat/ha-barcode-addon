@@ -1,116 +1,110 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-  <meta charset="UTF-8">
-  <title>WOG Hallenscan</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <title>WOG Barcode Scanner</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    body { font-family: system-ui,sans-serif; background: #f3f9f4; margin: 0; }
-    header { background: #21b573; color: #fff; padding: 1.4rem 1rem 1rem 1rem; text-align: center; border-bottom-left-radius: 1.5rem; border-bottom-right-radius: 1.5rem;}
-    .container { max-width: 390px; margin: 2.2rem auto; padding: 2.1rem 1.2rem 2rem 1.2rem; background: #fff; border-radius: 1.6rem; box-shadow: 0 4px 20px #0001;}
-    .mode { background: #eafbf2; color: #18965a; font-size: 1.18rem; text-align: center; border-radius: 0.7rem; margin-bottom: 1.4rem; padding: 0.6rem 0;}
-    .bigscan { background: #21b573; color: #fff; font-size: 2.0rem; font-weight: bold; border-radius: 1.5rem; padding: 1.6rem 0; border: none; width: 100%; margin-bottom: 1.1rem; box-shadow: 0 1px 12px #21b57333; cursor: pointer; transition: background 0.18s;}
-    .bigscan:active { background: #18965a; }
-    .input-row { margin-bottom: 1.4rem;}
-    .status-ok { background: #eafbf2; color: #18965a; border-left: 7px solid #21b573; padding: 1rem; border-radius: 1rem; font-size: 1.13rem;}
-    .status-error { background: #fff3f4; color: #ba2121; border-left: 7px solid #e74c3c; padding: 1rem; border-radius: 1rem; font-size: 1.13rem;}
-    .lastscans { margin-top: 2.1rem;}
-    .scanlist { list-style: none; margin: 0; padding: 0;}
-    .scanitem { padding: 0.7rem 0.7rem 0.7rem 1rem; border-bottom: 1px solid #eee; font-size: 1rem;}
-    .scanitem.ok { color: #21b573;}
-    .scanitem.fail { color: #e74c3c;}
-    .input-fallback { margin: 1.1rem 0 0.7rem 0; }
-    input[type="text"] { width: 100%; padding: 1.1rem; border-radius: 1rem; border: 1.5px solid #cdeede; font-size: 1.15rem;}
-    select, label, input[type="checkbox"] { margin-top:1rem; margin-bottom: 1rem;}
-    @media (max-width:500px) {
-      .container { padding: 1.0rem 0.1rem 1.2rem 0.1rem; }
-      header { padding: 1rem 0.2rem 0.6rem 0.2rem; }
-    }
+    body { font-family: Arial, sans-serif; margin: 2rem; background: #f9f9f9; }
+    input[type="text"] { padding: 0.5rem; width: 300px; font-size: 1rem; }
+    button { padding: 0.5rem 1rem; font-size: 1rem; margin-left: 0.5rem; }
+    .result, .last-scans { margin-top: 1rem; padding: 1rem; background: white; border-radius: 6px; box-shadow: 0 0 4px rgba(0,0,0,0.1); }
+    .last-scans div { border-bottom: 1px solid #eee; padding: 0.5rem 0; }
+    .last-scans div:last-child { border-bottom: none; }
   </style>
 </head>
 <body>
-  <header>
-    <h2>WOG Hallenscan</h2>
-    <div style="font-size:1rem; font-weight:400;">Modus: Wareneingang Halle 2</div>
-  </header>
-  <div class="container">
-    <div class="mode">
-      Wareneingang · <span style="font-weight:700;">Halle 2</span>
-    </div>
-    <form id="scanForm" onsubmit="scanBarcode(); return false;">
-      <button type="button" class="bigscan" onclick="scanBarcode()">Barcode SCANNEN</button>
-      <div class="input-fallback">
-        <input type="text" id="barcodeInput" placeholder="...oder Barcode manuell eingeben" autocomplete="off">
-      </div>
-      <div style="margin-bottom:1rem;">
-        <label for="statusSelect">Status:</label>
-        <select id="statusSelect">
-          <option>Hallenscan</option>
-          <option>Warenausgang</option>
-          <option>Retoure</option>
-        </select>
-      </div>
-      <label><input type="checkbox" id="transmitXml" /> Scan übertragen</label>
-    </form>
-    <div id="scanStatus" class="status-ok" style="display:none;"></div>
-    <div class="lastscans">
-      <b>Letzte Scans:</b>
-      <ul class="scanlist" id="lastScans"></ul>
-    </div>
-  </div>
-  <script>
-    // Für Demo: letzte Scans im LocalStorage
-    const scanlist = JSON.parse(localStorage.getItem("lastScans") || "[]");
-    const lastScansEl = document.getElementById("lastScans");
-    function renderLastScans() {
-      lastScansEl.innerHTML = scanlist.map(
-        s => `<li class="scanitem ${s.status}">${s.barcode} · ${s.empfaenger || "-"} · <b>${s.status === "ok" ? "OK" : "FEHLER"}</b></li>`
-      ).join("");
-    }
-    renderLastScans();
 
-    async function scanBarcode() {
-      const barcode = document.getElementById('barcodeInput').value.trim();
-      if (!barcode) {
-        showStatus("Bitte Barcode eingeben!", false);
+<h1>WOG Barcode Scanner</h1>
+
+<label for="barcode-input">Barcode scannen oder eingeben:</label><br />
+<input type="text" id="barcode-input" autocomplete="off" />
+<button id="scan-btn">Scannen</button>
+
+<div class="result" id="result"></div>
+
+<h2>Letzte Scans</h2>
+<div class="last-scans" id="last-scans"></div>
+
+<script>
+  async function scanBarcode(barcode) {
+    if (!barcode) return;
+
+    const resultDiv = document.getElementById('result');
+    resultDiv.textContent = 'Lade...';
+
+    try {
+      const response = await fetch('/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ barcode })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        resultDiv.textContent = 'Fehler: ' + (error.error || 'Unbekannter Fehler');
         return;
       }
-      // API-Aufruf zum Backend (hier: /api/scan?barcode=...)
-      try {
-        const resp = await fetch(`/api/scan?barcode=${encodeURIComponent(barcode)}`);
-        if (!resp.ok) throw new Error("Scan-Fehler");
-        const data = await resp.json();
-        if (data.found) {
-          showStatus(
-            `<b>Scan erfolgreich!</b><br>
-            SSCC: <span style="font-family:monospace;">${barcode}</span><br>
-            Empfänger: ${data.Recipient}<br>
-            Lieferdatum: ${data.DeliveryDate}<br>
-            Auftrag: ${data.OrderNumber}<br>
-            Colli: ${data.Quantity}`, true
-          );
-          scanlist.unshift({barcode, empfaenger: data.Recipient, status:"ok"});
-        } else {
-          showStatus(
-            `<b>Unbekannter Barcode!</b><br>Bitte erneut versuchen oder Barcode prüfen.`, false
-          );
-          scanlist.unshift({barcode, status:"fail"});
-        }
-        // Maximal 10 Scans speichern
-        localStorage.setItem("lastScans", JSON.stringify(scanlist.slice(0,10)));
-        renderLastScans();
-      } catch (e) {
-        showStatus("Server nicht erreichbar!", false);
-      }
-      document.getElementById('barcodeInput').value = "";
-    }
 
-    function showStatus(html, ok) {
-      const el = document.getElementById('scanStatus');
-      el.style.display = "block";
-      el.className = ok ? "status-ok" : "status-error";
-      el.innerHTML = html;
+      const data = await response.json();
+
+      if (!data.found) {
+        resultDiv.textContent = `Kein Datensatz für Barcode "${barcode}" gefunden.`;
+        return;
+      }
+
+      const d = data.data || {};
+      resultDiv.innerHTML = `
+        <strong>Barcode:</strong> ${barcode}<br />
+        <strong>Empfänger:</strong> ${d.Recipient || d.EmpfName1 || 'n/a'}<br />
+        <strong>Lieferdatum:</strong> ${d.DeliveryDate || 'n/a'}<br />
+        <strong>Auftragsnummer:</strong> ${d.OrderNumber || d.TransportOrderNumber || 'n/a'}<br />
+        <strong>Menge:</strong> ${d.Quantity || d.Colli || 'n/a'}
+      `;
+
+      loadLastScans();
+
+    } catch (err) {
+      resultDiv.textContent = 'Fehler beim Scannen: ' + err.message;
     }
-  </script>
+  }
+
+  async function loadLastScans() {
+    const lastScansDiv = document.getElementById('last-scans');
+    try {
+      const response = await fetch('/last_scans');
+      if (!response.ok) throw new Error('Fehler beim Laden der letzten Scans');
+      const lastScans = await response.json();
+
+      if (!lastScans.length) {
+        lastScansDiv.textContent = 'Noch keine Scans vorhanden.';
+        return;
+      }
+
+      lastScansDiv.innerHTML = '';
+      lastScans.forEach(scan => {
+        const b = scan.barcode;
+        const found = scan.result.found ? '✔️' : '❌';
+        lastScansDiv.innerHTML += `<div>${found} Barcode: <strong>${b}</strong></div>`;
+      });
+    } catch {
+      lastScansDiv.textContent = 'Fehler beim Laden der letzten Scans.';
+    }
+  }
+
+  document.getElementById('scan-btn').addEventListener('click', () => {
+    const barcode = document.getElementById('barcode-input').value.trim();
+    scanBarcode(barcode);
+  });
+
+  document.getElementById('barcode-input').addEventListener('keyup', (e) => {
+    if (e.key === 'Enter') {
+      scanBarcode(e.target.value.trim());
+    }
+  });
+
+  window.onload = loadLastScans;
+</script>
+
 </body>
 </html>
