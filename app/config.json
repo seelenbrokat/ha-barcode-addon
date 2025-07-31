@@ -1,7 +1,7 @@
 {
   "name": "WOG Barcode Scanner",
   "version": "1.0.10",
-  "slug": "wog_barcode_scanner",
+  "slug": "app",
   "description": "Barcode-Scan Add-on für Wareneingang mit MariaDB-Anbindung.",
   "startup": "application",
   "ingress": true,
