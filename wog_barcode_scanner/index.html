@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8">
-  <title>WOG Barcode Funktionen</title>
+  <title>WOG Barcode App</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     body { font-family: system-ui,sans-serif; background: #f3f9f4; margin: 0; }
@@ -41,28 +41,28 @@
       <div class="tab" id="tab-setstatus" onclick="switchTab('setstatus')">Status setzen</div>
     </div>
 
-    <!-- Scanner-Modus (deine bestehende Logik bleibt, Formular kann beliebig sein!) -->
-    <form id="form-scan" class="formrow" action="/scan" method="post">
-      <input type="text" name="sscc" placeholder="Barcode/SSCC eingeben oder scannen" autocomplete="off" required>
+    <!-- SCANNER -->
+    <form id="form-scan" class="formrow" onsubmit="scanBarcode(event)">
+      <input type="text" id="scan-barcode" name="sscc" placeholder="Barcode/SSCC eingeben oder scannen" autocomplete="off" required>
       <button class="bigscan" type="submit">Barcode scannen</button>
     </form>
 
-    <!-- Hallenscan-Modus -->
-    <form id="form-hallen" class="formrow" action="/scan_status" method="post" style="display:none;">
-      <select name="status" class="dropdown">
+    <!-- HALLENSCAN -->
+    <form id="form-hallen" class="formrow" style="display:none;" onsubmit="scanStatus(event)">
+      <select id="hallen-status" class="dropdown">
         <option>Hallenscan</option>
         <option>Wareneingang</option>
         <option>Warenausgang</option>
         <option>Retoure</option>
       </select>
-      <input type="text" name="sscc" placeholder="Barcode/SSCC eingeben oder scannen" autocomplete="off" required>
+      <input type="text" id="hallen-barcode" placeholder="Barcode/SSCC eingeben oder scannen" autocomplete="off" required>
       <button class="bigscan" type="submit">Hallenscan</button>
     </form>
 
-    <!-- Status setzen Modus -->
-    <form id="form-setstatus" class="formrow" action="/set_status" method="post" style="display:none;">
-      <input type="text" name="sscc" placeholder="SSCC eingeben" autocomplete="off" required>
-      <select name="status" class="dropdown">
+    <!-- STATUS SETZEN -->
+    <form id="form-setstatus" class="formrow" style="display:none;" onsubmit="setManualStatus(event)">
+      <input type="text" id="manual-barcode" placeholder="SSCC eingeben" autocomplete="off" required>
+      <select id="manual-status" class="dropdown">
         <option>Hallenscan</option>
         <option>Wareneingang</option>
         <option>Warenausgang</option>
@@ -71,43 +71,16 @@
       <button class="bigscan" type="submit">Status setzen</button>
     </form>
 
-    <!-- Scan/Status Feedback -->
-    <!--
-      Hier sollte das Backend nach dem Absenden eine Meldung rendern, z. B.:
-      <div class="status-ok">Übertragen</div> oder <div class="status-error">Fehler</div>
-      Beispiel für Flask:
-      {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-          {% for cat, msg in messages %}
-            <div class="status-{{ 'ok' if cat == 'success' else 'error' }}">{{ msg }}</div>
-          {% endfor %}
-        {% endif %}
-      {% endwith %}
-    -->
-
-    <!-- Letzte Scans/Status -->
-    <!--
-      Hier vom Backend liefern lassen:
-      <ul class="scanlist">
-        <li class="scanitem ok">00890105150065221849 · Hallenscan · <b>Übertragen</b></li>
-        <li class="scanitem fail">009123456789087654 · Fehler: Nicht gefunden</li>
-      </ul>
-      Beispiel für Flask-Template:
-      {% for scan in last_scans %}
-        <li class="scanitem {{'ok' if scan.ok else 'fail'}}">
-          {{ scan.sscc }} · {{ scan.status }} · {% if scan.ok %}<b>Übertragen</b>{% else %}<b>Fehler</b> ({{scan.msg}}){% endif %}
-        </li>
-      {% endfor %}
-    -->
+    <div id="feedback"></div>
 
     <div class="lastscans">
       <b>Letzte Scans:</b>
-      <ul class="scanlist" id="scanlist">
-        <!-- Dynamisch durch Backend ausgeben! -->
-      </ul>
+      <ul class="scanlist" id="scanlist"></ul>
     </div>
   </div>
+
   <script>
+    // Tab Umschaltung
     function switchTab(tab) {
       document.getElementById('tab-scan').classList.remove('active');
       document.getElementById('tab-hallen').classList.remove('active');
@@ -115,6 +88,7 @@
       document.getElementById('form-scan').style.display = 'none';
       document.getElementById('form-hallen').style.display = 'none';
       document.getElementById('form-setstatus').style.display = 'none';
+      document.getElementById('feedback').innerHTML = "";
 
       if(tab === 'scan') {
         document.getElementById('tab-scan').classList.add('active');
@@ -127,7 +101,98 @@
         document.getElementById('form-setstatus').style.display = 'block';
       }
     }
-    // Optional: Tabs nach Reload merken (localStorage)
+
+    // AJAX für Scanner-Modus (ändert NICHT das Backend!)
+    function scanBarcode(event) {
+      event.preventDefault();
+      const barcode = document.getElementById('scan-barcode').value.trim();
+      fetch('/scan', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ barcode })
+      })
+      .then(r => r.json()).then(data => {
+        if(data.found) {
+          feedback("Scan erfolgreich: " + barcode, true);
+          addScan(barcode, "Scanner", true, "");
+        } else {
+          feedback("Kein Treffer: " + barcode, false);
+          addScan(barcode, "Scanner", false, "Nicht gefunden");
+        }
+      }).catch(e => {
+        feedback("Serverfehler!", false);
+      });
+      document.getElementById('scan-barcode').value = "";
+    }
+
+    // AJAX für Hallenscan (NEUES Backend-Endpunkt nötig, z.B. /scan_status)
+    function scanStatus(event) {
+      event.preventDefault();
+      const sscc = document.getElementById('hallen-barcode').value.trim();
+      const status = document.getElementById('hallen-status').value;
+      fetch('/scan_status', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ sscc, status })
+      })
+      .then(r => r.json()).then(data => {
+        if(data.ok) {
+          feedback("Status übertragen: " + sscc + " ("+status+")", true);
+          addScan(sscc, status, true, "");
+        } else {
+          feedback("Fehler beim Übertragen: " + (data.error || ""), false);
+          addScan(sscc, status, false, data.error || "");
+        }
+      }).catch(e => {
+        feedback("Serverfehler!", false);
+      });
+      document.getElementById('hallen-barcode').value = "";
+    }
+
+    // AJAX für Status setzen (NEUES Backend-Endpunkt nötig, z.B. /set_status)
+    function setManualStatus(event) {
+      event.preventDefault();
+      const sscc = document.getElementById('manual-barcode').value.trim();
+      const status = document.getElementById('manual-status').value;
+      fetch('/set_status', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ sscc, status })
+      })
+      .then(r => r.json()).then(data => {
+        if(data.ok) {
+          feedback("Status gesetzt: " + sscc + " ("+status+")", true);
+          addScan(sscc, status, true, "");
+        } else {
+          feedback("Fehler beim Setzen: " + (data.error || ""), false);
+          addScan(sscc, status, false, data.error || "");
+        }
+      }).catch(e => {
+        feedback("Serverfehler!", false);
+      });
+      document.getElementById('manual-barcode').value = "";
+    }
+
+    // Feedback anzeigen
+    function feedback(msg, ok) {
+      document.getElementById('feedback').innerHTML = '<div class="status-' + (ok ? 'ok' : 'error') + '">' + msg + '</div>';
+    }
+    // Letzte Scans merken
+    let lastScans = [];
+    function addScan(sscc, status, ok, msg) {
+      lastScans.unshift({sscc, status, ok, msg});
+      if (lastScans.length > 10) lastScans = lastScans.slice(0, 10);
+      renderScanlist();
+    }
+    function renderScanlist() {
+      let html = "";
+      lastScans.forEach(scan => {
+        html += `<li class="scanitem ${scan.ok ? 'ok' : 'fail'}">${scan.sscc} · ${scan.status} · ` +
+                (scan.ok ? "<b>Übertragen</b>" : "<b>Fehler</b> " + (scan.msg||"")) +
+                `</li>`;
+      });
+      document.getElementById('scanlist').innerHTML = html;
+    }
   </script>
 </body>
 </html>
