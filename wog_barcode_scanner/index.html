@@ -222,7 +222,11 @@
       let html = "";
       lastScans.forEach(scan => {
         html += `<li class="scanitem ${scan.ok ? 'ok' : 'fail'}">${scan.sscc} · ${scan.status} · ` +
-                (scan.ok ? "<b>Übertragen</b>" : "<b>Fehler</b> " + (scan.msg||"")) +
+                (
+                  scan.ok
+                    ? (scan.status === "Scanner" ? "<b>Gefunden</b>" : "<b>Übertragen</b>")
+                    : "<b>Fehler</b> " + (scan.msg||"")
+                ) +
                 `</li>`;
       });
       document.getElementById('scanlist').innerHTML = html;
