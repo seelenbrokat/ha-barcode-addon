@@ -8,7 +8,7 @@ from pathlib import Path
 import pymysql
 from datetime import datetime
 import xml.etree.ElementTree as ET
-from ftplib import FTP_TLS  # ← NUR HIER: FTPS verwenden!
+from ftplib import FTP_TLS  # Für FTPS
 
 # Logging explizit auf stdout für Home Assistant Add-on!
 logging.basicConfig(
@@ -32,8 +32,6 @@ if os.path.exists(CONFIG_FILE):
         'user': config.get('db_user', 'root'),
         'password': config.get('db_password', 'password'),
         'database': config.get('db_name', 'homeassistant'),
-        'table': config.get('db_table', 'wareneingang'),
-        'sscc_column': config.get('sscc_column', 'SSCCs')
     }
     FTP_CONFIG = {
         'host': config.get('ftp_host', ''),
@@ -51,8 +49,6 @@ else:
         'user': 'root',
         'password': 'password',
         'database': 'homeassistant',
-        'table': 'wareneingang',
-        'sscc_column': 'SSCCs'
     }
     FTP_CONFIG = {
         'host': '',
@@ -91,13 +87,12 @@ def index():
 
 @app.route("/scan", methods=["POST"])
 def scan():
-    # Standard-Scan-Modus (unverändert, robustes JSON-Parsing!)
     try:
         data = request.get_json(silent=True)
         if data is None:
             logger.warning("Ungültiges JSON-Format.")
             return jsonify({"error": "Ungültiges JSON-Format"}), 400
-        barcode = data.get("barcode")
+        barcode = data.get("barcode", "").strip()
         logger.debug(f"Barcode empfangen: {barcode}")
         if not barcode:
             logger.warning("Kein Barcode im Request.")
@@ -110,18 +105,39 @@ def scan():
 
         try:
             with conn.cursor() as cursor:
-                sql = f"SELECT * FROM {DB_CONFIG['table']} WHERE {DB_CONFIG['sscc_column']} LIKE %s LIMIT 1"
-                cursor.execute(sql, ("%" + barcode + "%",))
-                result = cursor.fetchone()
+                sql = """
+                SELECT
+                  c.empf_name1        AS empfaenger,
+                  c.lieferend         AS zustelldatum,
+                  ci.quantity         AS collianzahl,
+                  o.name1             AS auftraggeber,
+                  ci.weight_kg        AS gewicht
+                FROM sscc s
+                JOIN consignment_items ci ON s.consignment_item_id = ci.id
+                JOIN consignments c       ON ci.consignment_id = c.id
+                JOIN orders o             ON c.order_id = o.id
+                WHERE s.code = %s
+                LIMIT 1
+                """
+                cursor.execute(sql, (barcode,))
+                row = cursor.fetchone()
         finally:
             conn.close()
 
-        if not result:
+        if not row:
             logger.info(f"Kein Treffer für Barcode {barcode}")
             return jsonify({"found": False, "barcode": barcode})
 
         logger.debug(f"Treffer für Barcode {barcode}")
-        return jsonify({"found": True, "barcode": barcode, "data": result})
+        return jsonify({
+            "found": True,
+            "barcode": barcode,
+            "empfaenger": row["empfaenger"],
+            "zustelldatum": row["zustelldatum"].strftime("%Y-%m-%d") if row["zustelldatum"] else "",
+            "collianzahl": row["collianzahl"],
+            "auftraggeber": row["auftraggeber"],
+            "gewicht": float(row["gewicht"]) if row["gewicht"] is not None else ""
+        })
 
     except Exception as e:
         logger.error(f"Fehler bei Scan: {e}", exc_info=True)
