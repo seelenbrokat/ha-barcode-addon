@@ -41,13 +41,11 @@
       <div class="tab" id="tab-setstatus" onclick="switchTab('setstatus')">Status setzen</div>
     </div>
 
-    <!-- SCANNER -->
     <form id="form-scan" class="formrow" onsubmit="scanBarcode(event)">
       <input type="text" id="scan-barcode" name="sscc" placeholder="Barcode/SSCC eingeben oder scannen" autocomplete="off" required>
       <button class="bigscan" type="submit">Barcode scannen</button>
     </form>
 
-    <!-- HALLENSCAN -->
     <form id="form-hallen" class="formrow" style="display:none;" onsubmit="scanStatus(event)">
       <select id="hallen-status" class="dropdown">
         <option>Hallenscan</option>
@@ -59,7 +57,6 @@
       <button class="bigscan" type="submit">Hallenscan</button>
     </form>
 
-    <!-- STATUS SETZEN -->
     <form id="form-setstatus" class="formrow" style="display:none;" onsubmit="setManualStatus(event)">
       <input type="text" id="manual-barcode" placeholder="SSCC eingeben" autocomplete="off" required>
       <select id="manual-status" class="dropdown">
@@ -72,7 +69,6 @@
     </form>
 
     <div id="feedback"></div>
-
     <div class="lastscans">
       <b>Letzte Scans:</b>
       <ul class="scanlist" id="scanlist"></ul>
@@ -80,7 +76,8 @@
   </div>
 
   <script>
-    // Tab Umschaltung
+    const BASE = window.location.pathname.replace(/\/$/, '');
+
     function switchTab(tab) {
       document.getElementById('tab-scan').classList.remove('active');
       document.getElementById('tab-hallen').classList.remove('active');
@@ -102,11 +99,10 @@
       }
     }
 
-    // AJAX für Scanner-Modus (ändert NICHT das Backend!)
     function scanBarcode(event) {
       event.preventDefault();
       const barcode = document.getElementById('scan-barcode').value.trim();
-      fetch('/scan', {
+      fetch(`${BASE}/scan`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ barcode })
@@ -125,12 +121,11 @@
       document.getElementById('scan-barcode').value = "";
     }
 
-    // AJAX für Hallenscan (NEUES Backend-Endpunkt nötig, z.B. /scan_status)
     function scanStatus(event) {
       event.preventDefault();
       const sscc = document.getElementById('hallen-barcode').value.trim();
       const status = document.getElementById('hallen-status').value;
-      fetch('/scan_status', {
+      fetch(`${BASE}/scan_status`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ sscc, status })
@@ -149,12 +144,11 @@
       document.getElementById('hallen-barcode').value = "";
     }
 
-    // AJAX für Status setzen (NEUES Backend-Endpunkt nötig, z.B. /set_status)
     function setManualStatus(event) {
       event.preventDefault();
       const sscc = document.getElementById('manual-barcode').value.trim();
       const status = document.getElementById('manual-status').value;
-      fetch('/set_status', {
+      fetch(`${BASE}/set_status`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ sscc, status })
@@ -173,11 +167,10 @@
       document.getElementById('manual-barcode').value = "";
     }
 
-    // Feedback anzeigen
     function feedback(msg, ok) {
       document.getElementById('feedback').innerHTML = '<div class="status-' + (ok ? 'ok' : 'error') + '">' + msg + '</div>';
     }
-    // Letzte Scans merken
+
     let lastScans = [];
     function addScan(sscc, status, ok, msg) {
       lastScans.unshift({sscc, status, ok, msg});
