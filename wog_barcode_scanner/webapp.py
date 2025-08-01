@@ -1,116 +1,155 @@
-import logging
-import json
 import os
+import logging
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
-from pathlib import Path
 import pymysql
+import json
 
-app = Flask(__name__, static_folder='/config/www', template_folder='/config/www')
-CORS(app)  # Aktiviere CORS für Ingress
+# --- Log-Verzeichnis & Datei ---
+LOG_DIR = "/tmp/logs"
+os.makedirs(LOG_DIR, exist_ok=True)
+LOG_FILE = os.path.join(LOG_DIR, "webapp.log")
 
-# Logging für Home Assistant
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s %(levelname)s %(message)s")
+# Logging maximal auf DEBUG
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s %(levelname)s %(message)s",
+    handlers=[
+        logging.FileHandler(LOG_FILE, encoding='utf-8'),
+        logging.StreamHandler()
+    ]
+)
 logger = logging.getLogger(__name__)
+logger.debug("Starte Webapp mit LOG-Level DEBUG (maximal).")
 
-# Lade DB-Konfiguration aus Home Assistant Add-on-Options
-CONFIG_FILE = '/data/options.json'
-if os.path.exists(CONFIG_FILE):
-    with open(CONFIG_FILE, 'r') as f:
-        config = json.load(f)
-    DB_CONFIG = {
-        'host': config.get('db_host', 'mariadb'),
-        'port': int(config.get('db_port', 3306)),
-        'user': config.get('db_user', 'root'),
-        'password': config.get('db_password', 'password'),
-        'database': config.get('db_name', 'homeassistant'),
-        'table': config.get('db_table', 'wareneingang'),
-        'sscc_column': config.get('sscc_column', 'SSCCs')
-    }
-    logger.debug("DB-Konfiguration aus /data/options.json geladen.")
-else:
-    logger.warning("Keine Konfigurationsdatei gefunden. Verwende Standardwerte.")
-    DB_CONFIG = {
-        'host': 'mariadb',
-        'port': 3306,
-        'user': 'root',
-        'password': 'password',
-        'database': 'homeassistant',
-        'table': 'wareneingang',
-        'sscc_column': 'SSCCs'
-    }
+app = Flask(__name__, static_folder='.', template_folder='.')
+CORS(app)
 
-def get_db_connection():
+def read_db_config():
+    config_paths = ["/config/config.txt", "/config/config.json"]
+    config = None
+    for path in config_paths:
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    if path.endswith('.json'):
+                        config = json.load(f)
+                        logger.debug(f"DB-Konfig aus JSON geladen: {path}")
+                    else:
+                        config = {}
+                        for line in f:
+                            if '=' in line:
+                                k, v = line.strip().split('=', 1)
+                                config[k.strip()] = v.strip()
+                        logger.debug(f"DB-Konfig aus TXT geladen: {path}")
+                break
+            except Exception as e:
+                logger.error(f"Fehler beim Laden der DB-Konfig aus {path}: {e}", exc_info=True)
+    if not config:
+        logger.error("Keine gültige DB-Konfiguration gefunden.")
+    return config
+
+def get_db_conn():
+    cfg = read_db_config()
+    if not cfg:
+        logger.error("DB-Konfiguration fehlt oder ungültig.")
+        return None
+
     try:
         conn = pymysql.connect(
-            host=DB_CONFIG['host'],
-            port=DB_CONFIG['port'],
-            user=DB_CONFIG['user'],
-            password=DB_CONFIG['password'],
-            database=DB_CONFIG['database'],
+            host=cfg.get("host"),
+            port=int(cfg.get("port", 3306)),
+            user=cfg.get("user"),
+            password=cfg.get("password"),
+            database=cfg.get("database"),
+            charset="utf8mb4",
             cursorclass=pymysql.cursors.DictCursor,
             connect_timeout=5
         )
-        logger.debug("DB-Verbindung hergestellt.")
+        logger.debug("Erfolgreich mit der MariaDB verbunden.")
         return conn
     except Exception as e:
-        logger.error(f"DB-Verbindung fehlgeschlagen: {e}")
+        logger.error(f"Fehler beim Verbinden mit der MariaDB: {e}", exc_info=True)
         return None
+
+last_scans = []
 
 @app.route("/")
 def index():
-    if not Path("/config/www/index.html").exists():
-        logger.error("index.html nicht gefunden.")
-        return jsonify({"error": "Index-Seite nicht gefunden"}), 404
-    return send_from_directory('/config/www', "index.html")
+    logger.debug("Index-Seite angefordert.")
+    return send_from_directory('.', "index.html")
 
 @app.route("/scan", methods=["POST"])
 def scan():
     try:
-        data = request.get_json()
-        if data is None:
-            logger.warning("Ungültiges JSON-Format.")
-            return jsonify({"error": "Ungültiges JSON-Format"}), 400
-        barcode = data.get("barcode")
+        data = request.get_json(force=True)
+        barcode = data.get("barcode", "").strip()
         logger.debug(f"Barcode empfangen: {barcode}")
+
         if not barcode:
-            logger.warning("Kein Barcode im Request.")
-            return jsonify({"error": "Barcode fehlt"}), 400
+            logger.warning("Kein Barcode im Request gefunden.")
+            return jsonify({"error": "Kein Barcode angegeben"}), 400
 
-        conn = get_db_connection()
+        conn = get_db_conn()
         if not conn:
-            return jsonify({"error": "Keine DB-Verbindung"}), 500
+            logger.error("DB-Verbindung fehlgeschlagen.")
+            return jsonify({"error": "DB-Verbindung fehlgeschlagen"}), 500
 
-        try:
-            with conn.cursor() as cursor:
-                sql = f"SELECT * FROM {DB_CONFIG['table']} WHERE {DB_CONFIG['sscc_column']} LIKE %s LIMIT 1"
-                cursor.execute(sql, ("%" + barcode + "%",))
-                result = cursor.fetchone()
-        finally:
-            conn.close()
+        with conn.cursor() as cur:
+            # 1. Versuch: Exakte Suche
+            sql_exact = """
+                SELECT *, Quantity AS Colli
+                FROM wareneingang
+                WHERE SSCCs = %s
+                ORDER BY ID DESC LIMIT 1
+            """
+            cur.execute(sql_exact, (barcode,))
+            row = cur.fetchone()
 
-        if not result:
-            logger.info(f"Kein Treffer für Barcode {barcode}")
-            return jsonify({"found": False, "barcode": barcode})
+            if not row:
+                # 2. Versuch: Suche in kommagetrenntem Feld
+                sql_like = """
+                    SELECT *, Quantity AS Colli
+                    FROM wareneingang
+                    WHERE CONCAT(',', SSCCs, ',') LIKE %s
+                    ORDER BY ID DESC LIMIT 1
+                """
+                like_param = f"%,{barcode},%"
+                cur.execute(sql_like, (like_param,))
+                row = cur.fetchone()
 
-        logger.debug(f"Treffer für Barcode {barcode}")
-        return jsonify({"found": True, "barcode": barcode, "data": result})
+        conn.close()
 
+        if not row:
+            logger.warning(f"Kein Datensatz für Barcode '{barcode}' gefunden.")
+            result = {"found": False, "barcode": barcode}
+        else:
+            result = {"found": True, "barcode": barcode, "data": row}
+
+        last_scans.insert(0, {"barcode": barcode, "result": result})
+        if len(last_scans) > 10:
+            last_scans.pop()
+
+        logger.debug(f"Scan-Ergebnis für '{barcode}': {result}")
+        return jsonify(result)
     except Exception as e:
-        logger.error(f"Fehler bei Scan: {e}", exc_info=True)
-        return jsonify({"error": "Serverfehler"}), 500
+        logger.error(f"Fehler bei Scan-API: {e}", exc_info=True)
+        return jsonify({"error": "Interner Serverfehler"}), 500
+
+@app.route("/last_scans", methods=["GET"])
+def last_scans_api():
+    try:
+        logger.debug("Letzte Scans angefragt.")
+        return jsonify(last_scans)
+    except Exception as e:
+        logger.error(f"Fehler bei /last_scans: {e}", exc_info=True)
+        return jsonify([])
 
 @app.route('/<path:filename>')
 def serve_static(filename):
-    allowed_extensions = {'.html', '.js', '.css', '.png', '.jpg', '.jpeg'}
-    if Path(filename).suffix not in allowed_extensions:
-        logger.warning(f"Zugriff auf nicht erlaubte Datei: {filename}")
-        return jsonify({"error": "Dateityp nicht erlaubt"}), 403
-    if not Path(f"/config/www/{filename}").exists():
-        logger.error(f"Datei nicht gefunden: {filename}")
-        return jsonify({"error": "Datei nicht gefunden"}), 404
-    return send_from_directory('/config/www', filename)
+    logger.debug(f"Statische Datei angefragt: {filename}")
+    return send_from_directory('.', filename)
 
 if __name__ == "__main__":
-    logger.info("Starte Flask-Webserver für Home Assistant Add-on")
-    app.run(host="0.0.0.0", port=5000, debug=False)  # Port 5000 für Ingress
+    logger.debug("Starte Flask Webserver...")
+    app.run(host="0.0.0.0", port=5000)
