@@ -44,7 +44,8 @@
     </div>
 
     <form id="form-scan" class="formrow" onsubmit="scanBarcode(event)">
-      <input type="text" id="scan-barcode" name="sscc" placeholder="Barcode/SSCC eingeben oder scannen" autocomplete="off" required autofocus>
+      <input type="text" id="scan-barcode" name="sscc" placeholder="Barcode/SSCC eingeben oder scannen"
+        autocomplete="off" required autofocus oninput="autoSubmitScan()">
       <button class="bigscan" type="submit">Barcode scannen</button>
     </form>
 
@@ -104,6 +105,16 @@
       }
     }
 
+    function autoSubmitScan() {
+      const input = document.getElementById('scan-barcode');
+      if (input.value.length >= 8) {
+        if (!window.lastScanValue || window.lastScanValue !== input.value) {
+          window.lastScanValue = input.value;
+          document.getElementById('form-scan').requestSubmit();
+        }
+      }
+    }
+
     function scanBarcode(event) {
       event.preventDefault();
       const input = document.getElementById('scan-barcode');
@@ -131,10 +142,12 @@
         }
         input.value = "";
         input.focus();
+        window.lastScanValue = null;
       }).catch(e => {
         feedback("Serverfehler!", false);
         input.value = "";
         input.focus();
+        window.lastScanValue = null;
       });
     }
 
