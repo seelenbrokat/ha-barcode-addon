@@ -1,3 +1,4 @@
+import sys
 import logging
 import json
 import os
@@ -5,15 +6,22 @@ from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from pathlib import Path
 import pymysql
+from datetime import datetime
+import xml.etree.ElementTree as ET
+from ftplib import FTP
+
+# Logging explizit auf stdout für Home Assistant Add-on!
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s %(levelname)s %(message)s",
+    stream=sys.stdout
+)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__, static_folder='/config/www', template_folder='/config/www')
 CORS(app)  # Aktiviere CORS für Ingress
 
-# Logging für Home Assistant
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s %(levelname)s %(message)s")
-logger = logging.getLogger(__name__)
-
-# Lade DB-Konfiguration aus Home Assistant Add-on-Options
+# Lade Konfiguration aus Home Assistant Add-on-Options
 CONFIG_FILE = '/data/options.json'
 if os.path.exists(CONFIG_FILE):
     with open(CONFIG_FILE, 'r') as f:
@@ -27,7 +35,14 @@ if os.path.exists(CONFIG_FILE):
         'table': config.get('db_table', 'wareneingang'),
         'sscc_column': config.get('sscc_column', 'SSCCs')
     }
-    logger.debug("DB-Konfiguration aus /data/options.json geladen.")
+    FTP_CONFIG = {
+        'host': config.get('ftp_host', ''),
+        'user': config.get('ftp_user', ''),
+        'pass': config.get('ftp_pass', ''),
+        'dir': config.get('ftp_dir', '/')
+    }
+    XML_DIR = config.get('xml_dir', '/share/barcode_status_xml/')
+    logger.debug("Konfiguration aus /data/options.json geladen.")
 else:
     logger.warning("Keine Konfigurationsdatei gefunden. Verwende Standardwerte.")
     DB_CONFIG = {
@@ -39,6 +54,15 @@ else:
         'table': 'wareneingang',
         'sscc_column': 'SSCCs'
     }
+    FTP_CONFIG = {
+        'host': '',
+        'user': '',
+        'pass': '',
+        'dir': '/'
+    }
+    XML_DIR = '/share/barcode_status_xml/'
+
+os.makedirs(XML_DIR, exist_ok=True)
 
 def get_db_connection():
     try:
@@ -59,6 +83,7 @@ def get_db_connection():
 
 @app.route("/")
 def index():
+    # Gibt die index.html zurück
     if not Path("/config/www/index.html").exists():
         logger.error("index.html nicht gefunden.")
         return jsonify({"error": "Index-Seite nicht gefunden"}), 404
@@ -66,8 +91,9 @@ def index():
 
 @app.route("/scan", methods=["POST"])
 def scan():
+    # Standard-Scan-Modus (unverändert, robustes JSON-Parsing!)
     try:
-        data = request.get_json()
+        data = request.get_json(silent=True)
         if data is None:
             logger.warning("Ungültiges JSON-Format.")
             return jsonify({"error": "Ungültiges JSON-Format"}), 400
@@ -79,6 +105,7 @@ def scan():
 
         conn = get_db_connection()
         if not conn:
+            logger.error("Fehler: Keine DB-Verbindung bei Scan!")
             return jsonify({"error": "Keine DB-Verbindung"}), 500
 
         try:
@@ -100,6 +127,69 @@ def scan():
         logger.error(f"Fehler bei Scan: {e}", exc_info=True)
         return jsonify({"error": "Serverfehler"}), 500
 
+def create_status_xml(sscc, status):
+    # Erzeuge Status-XML
+    root = ET.Element("Status")
+    ET.SubElement(root, "SSCC").text = sscc
+    ET.SubElement(root, "Status").text = status
+    timestamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    ET.SubElement(root, "Timestamp").text = timestamp
+
+    filename = f"status_{sscc}_{datetime.now().strftime('%Y%m%dT%H%M%S')}.xml"
+    filepath = os.path.join(XML_DIR, filename)
+    ET.ElementTree(root).write(filepath, encoding='utf-8', xml_declaration=True)
+    logger.debug(f"Status-XML erzeugt: {filepath}")
+    return filepath, filename
+
+def upload_ftp(filepath, filename):
+    # Übertrage Datei per FTP
+    try:
+        if not FTP_CONFIG["host"] or not FTP_CONFIG["user"] or not FTP_CONFIG["pass"]:
+            logger.warning("FTP-Daten nicht vollständig konfiguriert.")
+            return False, "FTP-Daten fehlen."
+        with FTP(FTP_CONFIG["host"]) as ftp:
+            ftp.login(user=FTP_CONFIG["user"], passwd=FTP_CONFIG["pass"])
+            ftp.cwd(FTP_CONFIG.get("dir", "/"))
+            with open(filepath, "rb") as f:
+                ftp.storbinary(f"STOR {filename}", f)
+        logger.info(f"Status-XML via FTP übertragen: {filename}")
+        return True, "Übertragen"
+    except Exception as e:
+        logger.error(f"FTP-Fehler: {e}")
+        return False, str(e)
+
+@app.route("/scan_status", methods=["POST"])
+def scan_status():
+    # Hallenscan-Modus: Status setzen, XML, FTP
+    try:
+        data = request.get_json(silent=True)
+        sscc = data.get("sscc", "").strip()
+        status = data.get("status", "Hallenscan")
+        if not sscc:
+            return jsonify({"ok": False, "error": "Kein SSCC übergeben"})
+        filepath, filename = create_status_xml(sscc, status)
+        ok, msg = upload_ftp(filepath, filename)
+        return jsonify({"ok": ok, "error": None if ok else msg})
+    except Exception as e:
+        logger.error(f"Fehler in /scan_status: {e}")
+        return jsonify({"ok": False, "error": str(e)})
+
+@app.route("/set_status", methods=["POST"])
+def set_status():
+    # Manueller Modus: Status setzen, XML, FTP
+    try:
+        data = request.get_json(silent=True)
+        sscc = data.get("sscc", "").strip()
+        status = data.get("status", "Hallenscan")
+        if not sscc:
+            return jsonify({"ok": False, "error": "Kein SSCC übergeben"})
+        filepath, filename = create_status_xml(sscc, status)
+        ok, msg = upload_ftp(filepath, filename)
+        return jsonify({"ok": ok, "error": None if ok else msg})
+    except Exception as e:
+        logger.error(f"Fehler in /set_status: {e}")
+        return jsonify({"ok": False, "error": str(e)})
+
 @app.route('/<path:filename>')
 def serve_static(filename):
     allowed_extensions = {'.html', '.js', '.css', '.png', '.jpg', '.jpeg'}
@@ -113,4 +203,4 @@ def serve_static(filename):
 
 if __name__ == "__main__":
     logger.info("Starte Flask-Webserver für Home Assistant Add-on")
-    app.run(host="0.0.0.0", port=5000, debug=False)  # Port 5000 für Ingress
+    app.run(host="0.0.0.0", port=5000, debug=False)
