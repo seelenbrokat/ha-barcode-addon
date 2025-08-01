@@ -3,11 +3,13 @@ FROM python:3.11-slim
 WORKDIR /app
 COPY . /app
 
-# Besser: dependencies aus requirements.txt, damit du flexibler bist
-# RUN pip install flask pymysql
+# Installiere Abhängigkeiten
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Kopiere index.html nach /config/www
+RUN mkdir -p /config/www && cp /app/index.html /config/www/index.html
 
 EXPOSE 5000
 
-# Starte das Flask-Backend (python3 ist Standard, falls du Python 3.11 nimmst)
-CMD ["python3", "webapp.py"]
+# Starte mit run.sh, um Umgebungsvariablen zu setzen
+CMD ["sh", "run.sh"]
