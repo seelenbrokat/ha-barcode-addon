@@ -61,7 +61,6 @@
   <input type="text" id="barcodeInput" placeholder="Barcode hier eingeben" />
   <button id="scanBtn">Scannen</button>
   <div class="result" id="result"></div>
-
   <script>
     const scanBtn = document.getElementById("scanBtn");
     const barcodeInput = document.getElementById("barcodeInput");
@@ -73,21 +72,28 @@
         resultDiv.textContent = "Bitte einen Barcode eingeben.";
         return;
       }
+
       resultDiv.textContent = "Suche...";
 
-      fetch(`/api/scan?barcode=${encodeURIComponent(barcode)}`)
+      fetch("/scan", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ barcode: barcode }),
+      })
         .then((response) => {
-          if (!response.ok) throw new Error("Fehler bei der Anfrage");
+          if (!response.ok) throw new Error(`HTTP-Fehler: ${response.status}`);
           return response.json();
         })
         .then((data) => {
           if (data.found) {
             resultDiv.textContent =
               `Barcode: ${data.barcode}\n` +
-              `Empfänger: ${data.Recipient || "-"}\n` +
-              `Lieferdatum: ${data.DeliveryDate || "-"}\n` +
-              `Auftrag: ${data.OrderNumber || "-"}\n` +
-              `Menge: ${data.Quantity || "-"}`;
+              `Empfänger: ${data.data.EmpfName1 || "-"}\n` +
+              `Lieferdatum: ${data.data.Lieferdatum || "-"}\n` +
+              `Auftrag: ${data.data.Auftragsnummer || "-"}\n` +
+              `Menge: ${data.data.Menge || "-"}`;
           } else {
             resultDiv.textContent = `Kein Datensatz für Barcode ${data.barcode} gefunden.`;
           }
