@@ -1,109 +1,133 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>WOG Barcode Scanner</title>
+  <meta charset="UTF-8">
+  <title>WOG Barcode Funktionen</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      max-width: 400px;
-      margin: 2rem auto;
-      background-color: #f9f9f9;
-      padding: 1rem;
-      border-radius: 8px;
-      box-shadow: 0 0 10px #ddd;
-    }
-    h1 {
-      text-align: center;
-      color: #333;
-    }
-    label {
-      font-weight: bold;
-      display: block;
-      margin-top: 1rem;
-    }
-    input[type="text"] {
-      width: 100%;
-      padding: 0.5rem;
-      font-size: 1rem;
-      margin-top: 0.25rem;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-    }
-    button {
-      margin-top: 1rem;
-      width: 100%;
-      padding: 0.75rem;
-      background-color: #0078d7;
-      color: white;
-      font-size: 1rem;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-    }
-    button:hover {
-      background-color: #005fa3;
-    }
-    .result {
-      margin-top: 1.5rem;
-      padding: 1rem;
-      background-color: #e7f3ff;
-      border-radius: 4px;
-      white-space: pre-wrap;
-      font-family: monospace;
+    body { font-family: system-ui,sans-serif; background: #f3f9f4; margin: 0; }
+    header { background: #21b573; color: #fff; padding: 1.4rem 1rem 1rem 1rem; text-align: center; border-bottom-left-radius: 1.5rem; border-bottom-right-radius: 1.5rem;}
+    .container { max-width: 430px; margin: 2.2rem auto; padding: 2.1rem 1.2rem 2rem 1.2rem; background: #fff; border-radius: 1.6rem; box-shadow: 0 4px 20px #0001;}
+    .tabs { display: flex; justify-content: space-between; margin-bottom: 1.6rem;}
+    .tab { flex: 1 1 0; text-align: center; padding: 1rem 0.2rem; cursor: pointer; font-size: 1.15rem; background: #eafbf2; color: #18965a; border-radius: 1.2rem; margin: 0 0.3rem; transition: background 0.14s;}
+    .tab.active { background: #21b573; color: #fff; font-weight: bold;}
+    .formrow { margin-bottom: 1.5rem;}
+    .bigscan { background: #21b573; color: #fff; font-size: 2.0rem; font-weight: bold; border-radius: 1.5rem; padding: 1.6rem 0; border: none; width: 100%; margin-bottom: 1.1rem; box-shadow: 0 1px 12px #21b57333; cursor: pointer; transition: background 0.18s;}
+    .bigscan:active { background: #18965a; }
+    .dropdown { width: 100%; padding: 1rem; border-radius: 1rem; border: 1.5px solid #cdeede; margin-bottom: 1.3rem; font-size: 1.13rem;}
+    input[type="text"] { width: 100%; padding: 1.1rem; border-radius: 1rem; border: 1.5px solid #cdeede; font-size: 1.15rem;}
+    .status-ok { background: #eafbf2; color: #18965a; border-left: 7px solid #21b573; padding: 1rem; border-radius: 1rem; font-size: 1.13rem;}
+    .status-error { background: #fff3f4; color: #ba2121; border-left: 7px solid #e74c3c; padding: 1rem; border-radius: 1rem; font-size: 1.13rem;}
+    .lastscans { margin-top: 2.1rem;}
+    .scanlist { list-style: none; margin: 0; padding: 0;}
+    .scanitem { padding: 0.7rem 0.7rem 0.7rem 1rem; border-bottom: 1px solid #eee; font-size: 1rem;}
+    .scanitem.ok { color: #21b573;}
+    .scanitem.fail { color: #e74c3c;}
+    @media (max-width:500px) {
+      .container { padding: 1.0rem 0.1rem 1.2rem 0.1rem; }
+      header { padding: 1rem 0.2rem 0.6rem 0.2rem; }
     }
   </style>
 </head>
 <body>
-  <h1>WOG Barcode Scanner</h1>
-  <label for="barcodeInput">Barcode eingeben:</label>
-  <input type="text" id="barcodeInput" placeholder="Barcode hier eingeben" />
-  <button id="scanBtn">Scannen</button>
-  <div class="result" id="result"></div>
+  <header>
+    <h2>WOG Barcode</h2>
+    <div style="font-size:1rem; font-weight:400;">Scannen & Statusrückmeldung</div>
+  </header>
+  <div class="container">
+    <div class="tabs">
+      <div class="tab active" id="tab-scan" onclick="switchTab('scan')">Scanner</div>
+      <div class="tab" id="tab-hallen" onclick="switchTab('hallen')">Hallenscan</div>
+      <div class="tab" id="tab-setstatus" onclick="switchTab('setstatus')">Status setzen</div>
+    </div>
+
+    <!-- Scanner-Modus (deine bestehende Logik bleibt, Formular kann beliebig sein!) -->
+    <form id="form-scan" class="formrow" action="/scan" method="post">
+      <input type="text" name="sscc" placeholder="Barcode/SSCC eingeben oder scannen" autocomplete="off" required>
+      <button class="bigscan" type="submit">Barcode scannen</button>
+    </form>
+
+    <!-- Hallenscan-Modus -->
+    <form id="form-hallen" class="formrow" action="/scan_status" method="post" style="display:none;">
+      <select name="status" class="dropdown">
+        <option>Hallenscan</option>
+        <option>Wareneingang</option>
+        <option>Warenausgang</option>
+        <option>Retoure</option>
+      </select>
+      <input type="text" name="sscc" placeholder="Barcode/SSCC eingeben oder scannen" autocomplete="off" required>
+      <button class="bigscan" type="submit">Hallenscan</button>
+    </form>
+
+    <!-- Status setzen Modus -->
+    <form id="form-setstatus" class="formrow" action="/set_status" method="post" style="display:none;">
+      <input type="text" name="sscc" placeholder="SSCC eingeben" autocomplete="off" required>
+      <select name="status" class="dropdown">
+        <option>Hallenscan</option>
+        <option>Wareneingang</option>
+        <option>Warenausgang</option>
+        <option>Retoure</option>
+      </select>
+      <button class="bigscan" type="submit">Status setzen</button>
+    </form>
+
+    <!-- Scan/Status Feedback -->
+    <!--
+      Hier sollte das Backend nach dem Absenden eine Meldung rendern, z. B.:
+      <div class="status-ok">Übertragen</div> oder <div class="status-error">Fehler</div>
+      Beispiel für Flask:
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for cat, msg in messages %}
+            <div class="status-{{ 'ok' if cat == 'success' else 'error' }}">{{ msg }}</div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+    -->
+
+    <!-- Letzte Scans/Status -->
+    <!--
+      Hier vom Backend liefern lassen:
+      <ul class="scanlist">
+        <li class="scanitem ok">00890105150065221849 · Hallenscan · <b>Übertragen</b></li>
+        <li class="scanitem fail">009123456789087654 · Fehler: Nicht gefunden</li>
+      </ul>
+      Beispiel für Flask-Template:
+      {% for scan in last_scans %}
+        <li class="scanitem {{'ok' if scan.ok else 'fail'}}">
+          {{ scan.sscc }} · {{ scan.status }} · {% if scan.ok %}<b>Übertragen</b>{% else %}<b>Fehler</b> ({{scan.msg}}){% endif %}
+        </li>
+      {% endfor %}
+    -->
+
+    <div class="lastscans">
+      <b>Letzte Scans:</b>
+      <ul class="scanlist" id="scanlist">
+        <!-- Dynamisch durch Backend ausgeben! -->
+      </ul>
+    </div>
+  </div>
   <script>
-    const scanBtn = document.getElementById("scanBtn");
-    const barcodeInput = document.getElementById("barcodeInput");
-    const resultDiv = document.getElementById("result");
+    function switchTab(tab) {
+      document.getElementById('tab-scan').classList.remove('active');
+      document.getElementById('tab-hallen').classList.remove('active');
+      document.getElementById('tab-setstatus').classList.remove('active');
+      document.getElementById('form-scan').style.display = 'none';
+      document.getElementById('form-hallen').style.display = 'none';
+      document.getElementById('form-setstatus').style.display = 'none';
 
-    scanBtn.addEventListener("click", () => {
-      const barcode = barcodeInput.value.trim();
-      if (!barcode) {
-        resultDiv.textContent = "Bitte einen Barcode eingeben.";
-        return;
+      if(tab === 'scan') {
+        document.getElementById('tab-scan').classList.add('active');
+        document.getElementById('form-scan').style.display = 'block';
+      } else if(tab === 'hallen') {
+        document.getElementById('tab-hallen').classList.add('active');
+        document.getElementById('form-hallen').style.display = 'block';
+      } else if(tab === 'setstatus') {
+        document.getElementById('tab-setstatus').classList.add('active');
+        document.getElementById('form-setstatus').style.display = 'block';
       }
-
-      resultDiv.textContent = "Suche...";
-
-      fetch("./scan", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ barcode: barcode }),
-      })
-        .then((response) => {
-          if (!response.ok) throw new Error(`HTTP-Fehler: ${response.status}`);
-          return response.json();
-        })
-        .then((data) => {
-          console.log("Daten vom Server:", data); // Debugging
-          if (data.found) {
-            resultDiv.textContent =
-              `Barcode: ${data.barcode}\n` +
-              `Lieferende: ${data.data.LieferEnd || "-"}\n` +
-              `Transportauftrag: ${data.data.TransportOrders || "-"}\n` +
-              `Organisationsnummer: ${data.data.OrgNumber || "-"}\n` +
-              `Aktion: ${data.data.ActionAttribute || "-"}\n` +
-              `Position: ${data.data.Posi || "-"}`;
-          } else {
-            resultDiv.textContent = `Kein Datensatz für Barcode ${data.barcode} gefunden.`;
-          }
-        })
-        .catch((err) => {
-          resultDiv.textContent = "Fehler beim Scannen: " + err.message;
-        });
-    });
+    }
+    // Optional: Tabs nach Reload merken (localStorage)
   </script>
 </body>
 </html>
