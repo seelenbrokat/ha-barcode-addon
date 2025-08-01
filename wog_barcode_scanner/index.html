@@ -87,13 +87,15 @@
           return response.json();
         })
         .then((data) => {
+          console.log("Daten vom Server:", data); // Debugging
           if (data.found) {
             resultDiv.textContent =
               `Barcode: ${data.barcode}\n` +
-              `Empfänger: ${data.data.EmpfName1 || "-"}\n` +
-              `Lieferdatum: ${data.data.Lieferdatum || "-"}\n` +
-              `Auftrag: ${data.data.Auftragsnummer || "-"}\n` +
-              `Menge: ${data.data.Menge || "-"}`;
+              `Lieferende: ${data.data.LieferEnd || "-"}\n` +
+              `Transportauftrag: ${data.data.TransportOrders || "-"}\n` +
+              `Organisationsnummer: ${data.data.OrgNumber || "-"}\n` +
+              `Aktion: ${data.data.ActionAttribute || "-"}\n` +
+              `Position: ${data.data.Posi || "-"}`;
           } else {
             resultDiv.textContent = `Kein Datensatz für Barcode ${data.barcode} gefunden.`;
           }
