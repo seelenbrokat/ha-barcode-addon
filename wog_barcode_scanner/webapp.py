@@ -6,14 +6,14 @@ from flask_cors import CORS
 from pathlib import Path
 import pymysql
 
-app = Flask(__name__, static_folder='.', template_folder='.')
-CORS(app)  # Aktiviere CORS für Zugriffe von anderen Domains (z.B. HA-Frontend)
+app = Flask(__name__, static_folder='/config/www', template_folder='/config/www')
+CORS(app)  # Aktiviere CORS für Ingress
 
-# Logging auf DEBUG-Level, Ausgabe in Konsole (für HA-Logs)
+# Logging für Home Assistant (Ausgabe in Konsole, da Logs in HA gesammelt werden)
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
-# Lade DB-Konfiguration aus Home Assistant Add-on-Options (/data/options.json)
+# Lade DB-Konfiguration aus Home Assistant Add-on-Options
 CONFIG_FILE = '/data/options.json'
 if os.path.exists(CONFIG_FILE):
     with open(CONFIG_FILE, 'r') as f:
@@ -55,10 +55,10 @@ def get_db_connection():
 
 @app.route("/")
 def index():
-    if not Path("index.html").exists():
+    if not Path("/config/www/index.html").exists():
         logger.error("index.html nicht gefunden.")
         return jsonify({"error": "Index-Seite nicht gefunden"}), 404
-    return send_from_directory('.', "index.html")
+    return send_from_directory('/config/www', "index.html")
 
 @app.route("/scan", methods=["POST"])
 def scan():
@@ -102,11 +102,11 @@ def serve_static(filename):
     if Path(filename).suffix not in allowed_extensions:
         logger.warning(f"Zugriff auf nicht erlaubte Datei: {filename}")
         return jsonify({"error": "Dateityp nicht erlaubt"}), 403
-    if not Path(filename).exists():
+    if not Path(f"/config/www/{filename}").exists():
         logger.error(f"Datei nicht gefunden: {filename}")
         return jsonify({"error": "Datei nicht gefunden"}), 404
-    return send_from_directory('.', filename)
+    return send_from_directory('/config/www', filename)
 
 if __name__ == "__main__":
-    logger.info("Starte Flask-Webserver (für Home Assistant Add-on)")
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    logger.info("Starte Flask-Webserver für Home Assistant Add-on")
+    app.run(host="0.0.0.0", port=8099, debug=False)  # Port 8099 für Ingress
