@@ -1,49 +1,44 @@
-{
-  "name": "WOG Barcode Scanner",
-  "version": "1.0.46",
-  "slug": "wog_barcode_scanner",
-  "description": "Barcode-Scan Add-on für Wareneingang mit MariaDB-Anbindung.",
-  "startup": "application",
-  "ingress": true,
-  "ingress_port": 5000,
-  "panel_icon": "mdi:barcode-scan",
-  "panel_title": "WOG Barcode",
-  "ports": {
-    "5000/tcp": null
-  },
-  "options": {
-    "db_host": "mariadb",
-    "db_port": 3306,
-    "db_user": "root",
-    "db_password": "password",
-    "db_name": "homeassistant",
-    "db_table": "wareneingang",
-    "sscc_column": "SSCCs",
-
-    "ftp_host": "ftp.server.tld",
-    "ftp_user": "dein-ftp-user",
-    "ftp_pass": "dein-passwort",
-    "ftp_dir": "/zielordner",
-    "xml_dir": "/share/barcode_status_xml/"
-  },
-  "schema": {
-    "db_host": "str",
-    "db_port": "int",
-    "db_user": "str",
-    "db_password": "str",
-    "db_name": "str",
-    "db_table": "str",
-    "sscc_column": "str",
-
-    "ftp_host": "str",
-    "ftp_user": "str",
-    "ftp_pass": "str",
-    "ftp_dir": "str",
-    "xml_dir": "str"
-  },
-  "arch": [
-    "amd64",
-    "aarch64",
-    "armv7"
-  ]
-}
+name: WOG Barcode Scanner
+version: "1.0.47"
+slug: wog_barcode_scanner
+description: Barcode-Scan Add-on für Wareneingang mit MariaDB-Anbindung.
+startup: application
+ingress: true
+ingress_port: 5000
+panel_icon: mdi:barcode-scan
+panel_title: WOG Barcode
+ports:
+  5000/tcp: null
+map:
+  - config:rw
+  - share:rw
+options:
+  db_host: mariadb
+  db_port: 3306
+  db_user: root
+  db_password: password
+  db_name: homeassistant
+  db_table: wareneingang
+  sscc_column: SSCCs
+  ftp_host: ftp.server.tld
+  ftp_user: dein-ftp-user
+  ftp_pass: dein-passwort
+  ftp_dir: /zielordner
+  xml_dir: /share/barcode_status_xml/
+schema:
+  db_host: str
+  db_port: int
+  db_user: str
+  db_password: str
+  db_name: str
+  db_table: str
+  sscc_column: str
+  ftp_host: str
+  ftp_user: str
+  ftp_pass: str
+  ftp_dir: str
+  xml_dir: str
+arch:
+  - amd64
+  - aarch64
+  - armv7
