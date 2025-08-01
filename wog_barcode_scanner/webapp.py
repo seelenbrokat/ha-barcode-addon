@@ -5,9 +5,7 @@ from flask_cors import CORS
 from pathlib import Path
 import pymysql
 
-# Setze das Basisverzeichnis basierend auf dem Skriptpfad
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-app = Flask(__name__, static_folder=os.path.join(BASE_DIR, '../../config/www'), template_folder=os.path.join(BASE_DIR, '../../config/www'))
+app = Flask(__name__, static_folder='/config/www', template_folder='/config/www')
 CORS(app)
 
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s %(levelname)s %(message)s")
@@ -44,11 +42,10 @@ def get_db_connection():
 
 @app.route("/")
 def index():
-    static_path = os.path.join(BASE_DIR, '../../config/www/index.html')
-    if not Path(static_path).exists():
-        logger.error(f"index.html nicht gefunden unter {static_path}")
+    if not Path("/config/www/index.html").exists():
+        logger.error("index.html nicht gefunden.")
         return jsonify({"error": "Index-Seite nicht gefunden"}), 404
-    return send_from_directory(os.path.join(BASE_DIR, '../../config/www'), "index.html")
+    return send_from_directory('/config/www', "index.html")
 
 @app.route("/scan", methods=["POST"])
 def scan():
@@ -89,14 +86,13 @@ def scan():
 @app.route('/<path:filename>')
 def serve_static(filename):
     allowed_extensions = {'.html', '.js', '.css', '.png', '.jpg', '.jpeg'}
-    static_path = os.path.join(BASE_DIR, '../../config/www', filename)
     if Path(filename).suffix not in allowed_extensions:
         logger.warning(f"Zugriff auf nicht erlaubte Datei: {filename}")
         return jsonify({"error": "Dateityp nicht erlaubt"}), 403
-    if not Path(static_path).exists():
-        logger.error(f"Datei nicht gefunden: {static_path}")
+    if not Path(f"/config/www/{filename}").exists():
+        logger.error(f"Datei nicht gefunden: {filename}")
         return jsonify({"error": "Datei nicht gefunden"}), 404
-    return send_from_directory(os.path.join(BASE_DIR, '../../config/www'), filename)
+    return send_from_directory('/config/www', filename)
 
 if __name__ == "__main__":
     logger.info("Starte Flask-Webserver für Home Assistant Add-on")
