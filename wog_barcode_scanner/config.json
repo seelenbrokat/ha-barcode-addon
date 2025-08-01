@@ -1,5 +1,5 @@
 name: WOG Barcode Scanner
-version: "1.0.47"
+version: "1.0.48"
 slug: wog_barcode_scanner
 description: Barcode-Scan Add-on für Wareneingang mit MariaDB-Anbindung.
 startup: application
