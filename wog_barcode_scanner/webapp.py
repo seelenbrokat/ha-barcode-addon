@@ -1,44 +1,29 @@
 import logging
-import json
 import os
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from pathlib import Path
 import pymysql
 
-app = Flask(__name__, static_folder='/config/www', template_folder='/config/www')
-CORS(app)  # Aktiviere CORS für Ingress
+# Setze das Basisverzeichnis basierend auf dem Skriptpfad
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+app = Flask(__name__, static_folder=os.path.join(BASE_DIR, '../../config/www'), template_folder=os.path.join(BASE_DIR, '../../config/www'))
+CORS(app)
 
-# Logging für Home Assistant (Ausgabe in Konsole, da Logs in HA gesammelt werden)
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
-# Lade DB-Konfiguration aus Home Assistant Add-on-Options
-CONFIG_FILE = '/data/options.json'
-if os.path.exists(CONFIG_FILE):
-    with open(CONFIG_FILE, 'r') as f:
-        config = json.load(f)
-    DB_CONFIG = {
-        'host': config.get('db_host', 'mariadb'),
-        'port': int(config.get('db_port', 3306)),
-        'user': config.get('db_user', 'root'),
-        'password': config.get('db_password', 'password'),
-        'database': config.get('db_name', 'homeassistant'),
-        'table': config.get('db_table', 'wareneingang'),
-        'sscc_column': config.get('sscc_column', 'SSCCs')
-    }
-    logger.debug("DB-Konfiguration aus /data/options.json geladen.")
-else:
-    logger.warning("Keine Konfigurationsdatei gefunden. Verwende Standardwerte.")
-    DB_CONFIG = {
-        'host': 'mariadb',
-        'port': 3306,
-        'user': 'root',
-        'password': 'password',
-        'database': 'homeassistant',
-        'table': 'wareneingang',
-        'sscc_column': 'SSCCs'
-    }
+# Lade Konfiguration aus Umgebungsvariablen (gesetzt von run.sh)
+DB_CONFIG = {
+    'host': os.getenv('DB_HOST', 'mariadb'),
+    'port': int(os.getenv('DB_PORT', 3306)),
+    'user': os.getenv('DB_USER', 'root'),
+    'password': os.getenv('DB_PASSWORD', 'password'),
+    'database': os.getenv('DB_NAME', 'homeassistant'),
+    'table': os.getenv('DB_TABLE', 'wareneingang'),
+    'sscc_column': os.getenv('SSCC_COLUMN', 'SSCCs')
+}
+logger.debug("DB-Konfiguration aus Umgebungsvariablen geladen.")
 
 def get_db_connection():
     try:
@@ -59,10 +44,11 @@ def get_db_connection():
 
 @app.route("/")
 def index():
-    if not Path("/config/www/index.html").exists():
-        logger.error("index.html nicht gefunden.")
+    static_path = os.path.join(BASE_DIR, '../../config/www/index.html')
+    if not Path(static_path).exists():
+        logger.error(f"index.html nicht gefunden unter {static_path}")
         return jsonify({"error": "Index-Seite nicht gefunden"}), 404
-    return send_from_directory('/config/www', "index.html")
+    return send_from_directory(os.path.join(BASE_DIR, '../../config/www'), "index.html")
 
 @app.route("/scan", methods=["POST"])
 def scan():
@@ -103,14 +89,15 @@ def scan():
 @app.route('/<path:filename>')
 def serve_static(filename):
     allowed_extensions = {'.html', '.js', '.css', '.png', '.jpg', '.jpeg'}
+    static_path = os.path.join(BASE_DIR, '../../config/www', filename)
     if Path(filename).suffix not in allowed_extensions:
         logger.warning(f"Zugriff auf nicht erlaubte Datei: {filename}")
         return jsonify({"error": "Dateityp nicht erlaubt"}), 403
-    if not Path(f"/config/www/{filename}").exists():
-        logger.error(f"Datei nicht gefunden: {filename}")
+    if not Path(static_path).exists():
+        logger.error(f"Datei nicht gefunden: {static_path}")
         return jsonify({"error": "Datei nicht gefunden"}), 404
-    return send_from_directory('/config/www', filename)
+    return send_from_directory(os.path.join(BASE_DIR, '../../config/www'), filename)
 
 if __name__ == "__main__":
     logger.info("Starte Flask-Webserver für Home Assistant Add-on")
-    app.run(host="0.0.0.0", port=5000, debug=False)  # Port 5000 für Ingress
+    app.run(host="0.0.0.0", port=5000, debug=False)
