@@ -125,7 +125,10 @@
         body: JSON.stringify({ barcode })
       })
       .then(r => r.json()).then(data => {
-        if(data.found) {
+        if(data.found === false) {
+          feedback("Kein Treffer: " + barcode, false);
+          addScan(barcode, "Scanner", false, "Nicht gefunden");
+        } else if(data.found === true) {
           let infos = "";
           if (data.empfaenger || data.zustelldatum || data.collianzahl) {
             infos = "<br><b>Empfänger:</b> " + (data.empfaenger || "-") +
@@ -137,8 +140,8 @@
           feedback("Scan erfolgreich: " + barcode + infos, true);
           addScan(barcode, "Scanner", true, "");
         } else {
-          feedback("Kein Treffer: " + barcode, false);
-          addScan(barcode, "Scanner", false, "Nicht gefunden");
+          feedback("Unbekannte Antwort vom Server!", false);
+          addScan(barcode, "Scanner", false, "Serverantwort unklar");
         }
         input.value = "";
         input.focus();
