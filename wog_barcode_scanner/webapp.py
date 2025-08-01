@@ -23,7 +23,9 @@ if os.path.exists(CONFIG_FILE):
         'port': int(config.get('db_port', 3306)),
         'user': config.get('db_user', 'root'),
         'password': config.get('db_password', 'password'),
-        'database': config.get('db_database', 'homeassistant')
+        'database': config.get('db_name', 'homeassistant'),
+        'table': config.get('db_table', 'wareneingang'),
+        'sscc_column': config.get('sscc_column', 'SSCCs')
     }
     logger.debug("DB-Konfiguration aus /data/options.json geladen.")
 else:
@@ -33,7 +35,9 @@ else:
         'port': 3306,
         'user': 'root',
         'password': 'password',
-        'database': 'homeassistant'
+        'database': 'homeassistant',
+        'table': 'wareneingang',
+        'sscc_column': 'SSCCs'
     }
 
 def get_db_connection():
@@ -79,7 +83,7 @@ def scan():
 
         try:
             with conn.cursor() as cursor:
-                sql = "SELECT * FROM wareneingang WHERE SSCCs LIKE %s LIMIT 1"
+                sql = f"SELECT * FROM {DB_CONFIG['table']} WHERE {DB_CONFIG['sscc_column']} LIKE %s LIMIT 1"
                 cursor.execute(sql, ("%" + barcode + "%",))
                 result = cursor.fetchone()
         finally:
@@ -109,4 +113,4 @@ def serve_static(filename):
 
 if __name__ == "__main__":
     logger.info("Starte Flask-Webserver für Home Assistant Add-on")
-    app.run(host="0.0.0.0", port=8099, debug=False)  # Port 8099 für Ingress
+    app.run(host="0.0.0.0", port=5000, debug=False)  # Port 5000 für Ingress
