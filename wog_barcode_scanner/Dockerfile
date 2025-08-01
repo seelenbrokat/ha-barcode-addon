@@ -1,4 +1,4 @@
-FROM ghcr.io/home-assistant/amd64-base-python:3.12
+FROM python:3.11-slim
 
 WORKDIR /app
 COPY . /app
@@ -11,5 +11,5 @@ RUN mkdir -p /config/www && cp /app/index.html /config/www/index.html
 
 EXPOSE 5000
 
-# Starte mit run.sh, um Umgebungsvariablen zu setzen
-CMD ["sh", "run.sh"]
+# Starte das Flask-Backend
+CMD ["python3", "webapp.py"]
