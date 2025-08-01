@@ -1,4 +1,5 @@
 import logging
+import json
 import os
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
@@ -6,22 +7,38 @@ from pathlib import Path
 import pymysql
 
 app = Flask(__name__, static_folder='/config/www', template_folder='/config/www')
-CORS(app)
+CORS(app)  # Aktiviere CORS für Ingress
 
+# Logging für Home Assistant
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
-# Lade Konfiguration aus Umgebungsvariablen (gesetzt von run.sh)
-DB_CONFIG = {
-    'host': os.getenv('DB_HOST', 'mariadb'),
-    'port': int(os.getenv('DB_PORT', 3306)),
-    'user': os.getenv('DB_USER', 'root'),
-    'password': os.getenv('DB_PASSWORD', 'password'),
-    'database': os.getenv('DB_NAME', 'homeassistant'),
-    'table': os.getenv('DB_TABLE', 'wareneingang'),
-    'sscc_column': os.getenv('SSCC_COLUMN', 'SSCCs')
-}
-logger.debug("DB-Konfiguration aus Umgebungsvariablen geladen.")
+# Lade DB-Konfiguration aus Home Assistant Add-on-Options
+CONFIG_FILE = '/data/options.json'
+if os.path.exists(CONFIG_FILE):
+    with open(CONFIG_FILE, 'r') as f:
+        config = json.load(f)
+    DB_CONFIG = {
+        'host': config.get('db_host', 'mariadb'),
+        'port': int(config.get('db_port', 3306)),
+        'user': config.get('db_user', 'root'),
+        'password': config.get('db_password', 'password'),
+        'database': config.get('db_name', 'homeassistant'),
+        'table': config.get('db_table', 'wareneingang'),
+        'sscc_column': config.get('sscc_column', 'SSCCs')
+    }
+    logger.debug("DB-Konfiguration aus /data/options.json geladen.")
+else:
+    logger.warning("Keine Konfigurationsdatei gefunden. Verwende Standardwerte.")
+    DB_CONFIG = {
+        'host': 'mariadb',
+        'port': 3306,
+        'user': 'root',
+        'password': 'password',
+        'database': 'homeassistant',
+        'table': 'wareneingang',
+        'sscc_column': 'SSCCs'
+    }
 
 def get_db_connection():
     try:
@@ -96,4 +113,4 @@ def serve_static(filename):
 
 if __name__ == "__main__":
     logger.info("Starte Flask-Webserver für Home Assistant Add-on")
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    app.run(host="0.0.0.0", port=5000, debug=False)  # Port 5000 für Ingress
