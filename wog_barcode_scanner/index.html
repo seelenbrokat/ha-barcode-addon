@@ -31,6 +31,7 @@
 </head>
 <body>
   <header>
+    <img src="WOG_AG-removebg-preview.png" alt="WOG Logo" style="display:block;margin:0 auto 0.5rem auto;max-width:130px;">
     <h2>WOG Barcode</h2>
     <div style="font-size:1rem; font-weight:400;">Scannen & Statusrückmeldung</div>
   </header>
@@ -42,7 +43,7 @@
     </div>
 
     <form id="form-scan" class="formrow" onsubmit="scanBarcode(event)">
-      <input type="text" id="scan-barcode" name="sscc" placeholder="Barcode/SSCC eingeben oder scannen" autocomplete="off" required>
+      <input type="text" id="scan-barcode" name="sscc" placeholder="Barcode/SSCC eingeben oder scannen" autocomplete="off" required autofocus>
       <button class="bigscan" type="submit">Barcode scannen</button>
     </form>
 
@@ -90,12 +91,15 @@
       if(tab === 'scan') {
         document.getElementById('tab-scan').classList.add('active');
         document.getElementById('form-scan').style.display = 'block';
+        document.getElementById('scan-barcode').focus();
       } else if(tab === 'hallen') {
         document.getElementById('tab-hallen').classList.add('active');
         document.getElementById('form-hallen').style.display = 'block';
+        document.getElementById('hallen-barcode').focus();
       } else if(tab === 'setstatus') {
         document.getElementById('tab-setstatus').classList.add('active');
         document.getElementById('form-setstatus').style.display = 'block';
+        document.getElementById('manual-barcode').focus();
       }
     }
 
@@ -109,7 +113,16 @@
       })
       .then(r => r.json()).then(data => {
         if(data.found) {
-          feedback("Scan erfolgreich: " + barcode, true);
+          let infos = "";
+          if (data.empfaenger || data.zustelldatum || data.collianzahl) {
+            infos = "<br><b>Empfänger:</b> " + (data.empfaenger || "-") +
+                    "<br><b>Zustelldatum:</b> " + (data.zustelldatum || "-") +
+                    "<br><b>Collianzahl:</b> " + (data.collianzahl || "-") +
+                    // Weitere Felder wie Auftraggeber und Gewicht hier hinzufügen:
+                    (data.auftraggeber ? "<br><b>Auftraggeber:</b> " + data.auftraggeber : "") +
+                    (data.gewicht ? "<br><b>Gewicht:</b> " + data.gewicht : "");
+          }
+          feedback("Scan erfolgreich: " + barcode + infos, true);
           addScan(barcode, "Scanner", true, "");
         } else {
           feedback("Kein Treffer: " + barcode, false);
@@ -119,6 +132,7 @@
         feedback("Serverfehler!", false);
       });
       document.getElementById('scan-barcode').value = "";
+      document.getElementById('scan-barcode').focus();
     }
 
     function scanStatus(event) {
@@ -142,6 +156,7 @@
         feedback("Serverfehler!", false);
       });
       document.getElementById('hallen-barcode').value = "";
+      document.getElementById('hallen-barcode').focus();
     }
 
     function setManualStatus(event) {
@@ -165,6 +180,7 @@
         feedback("Serverfehler!", false);
       });
       document.getElementById('manual-barcode').value = "";
+      document.getElementById('manual-barcode').focus();
     }
 
     function feedback(msg, ok) {
@@ -186,6 +202,11 @@
       });
       document.getElementById('scanlist').innerHTML = html;
     }
+
+    // Beim Laden direkt auf das Feld fokussieren:
+    window.onload = () => {
+      document.getElementById('scan-barcode').focus();
+    };
   </script>
 </body>
 </html>
