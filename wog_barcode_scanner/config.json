@@ -20,10 +20,10 @@ options:
   db_name: homeassistant
   db_table: wareneingang
   sscc_column: SSCCs
-  ftp_host: ftp.server.tld      # ← anpassen!
-  ftp_user: dein-ftp-user       # ← anpassen!
-  ftp_pass: dein-passwort       # ← anpassen!
-  ftp_dir: /zielordner          # ← anpassen!
+  ftp_host: ftp.server.tld
+  ftp_user: dein-ftp-user
+  ftp_pass: dein-passwort
+  ftp_dir: /zielordner
   xml_dir: /share/barcode_status_xml/
 schema:
   db_host: str
