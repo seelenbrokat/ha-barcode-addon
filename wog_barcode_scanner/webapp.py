@@ -8,7 +8,7 @@ from pathlib import Path
 import pymysql
 from datetime import datetime
 import xml.etree.ElementTree as ET
-from ftplib import FTP
+from ftplib import FTP_TLS  # ← NUR HIER: FTPS verwenden!
 
 # Logging explizit auf stdout für Home Assistant Add-on!
 logging.basicConfig(
@@ -142,17 +142,18 @@ def create_status_xml(sscc, status):
     return filepath, filename
 
 def upload_ftp(filepath, filename):
-    # Übertrage Datei per FTP
+    # Übertrage Datei per FTPS (explizit TLS!)
     try:
         if not FTP_CONFIG["host"] or not FTP_CONFIG["user"] or not FTP_CONFIG["pass"]:
             logger.warning("FTP-Daten nicht vollständig konfiguriert.")
             return False, "FTP-Daten fehlen."
-        with FTP(FTP_CONFIG["host"]) as ftp:
+        with FTP_TLS(FTP_CONFIG["host"]) as ftp:          # FTPS verwenden!
             ftp.login(user=FTP_CONFIG["user"], passwd=FTP_CONFIG["pass"])
+            ftp.prot_p()                                 # Verschlüsselten Datentransfer aktivieren!
             ftp.cwd(FTP_CONFIG.get("dir", "/"))
             with open(filepath, "rb") as f:
                 ftp.storbinary(f"STOR {filename}", f)
-        logger.info(f"Status-XML via FTP übertragen: {filename}")
+        logger.info(f"Status-XML via FTPS übertragen: {filename}")
         return True, "Übertragen"
     except Exception as e:
         logger.error(f"FTP-Fehler: {e}")
