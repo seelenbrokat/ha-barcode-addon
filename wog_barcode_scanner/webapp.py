@@ -8,7 +8,7 @@ from pathlib import Path
 import pymysql
 from datetime import datetime
 import xml.etree.ElementTree as ET
-from ftplib import FTP_TLS  # Für FTPS
+from ftplib import FTP_TLS
 
 # Logging explizit auf stdout für Home Assistant Add-on!
 logging.basicConfig(
@@ -21,7 +21,6 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__, static_folder='/config/www', template_folder='/config/www')
 CORS(app)  # Aktiviere CORS für Ingress
 
-# Lade Konfiguration aus Home Assistant Add-on-Options
 CONFIG_FILE = '/data/options.json'
 if os.path.exists(CONFIG_FILE):
     with open(CONFIG_FILE, 'r') as f:
@@ -32,6 +31,8 @@ if os.path.exists(CONFIG_FILE):
         'user': config.get('db_user', 'root'),
         'password': config.get('db_password', 'password'),
         'database': config.get('db_name', 'homeassistant'),
+        'table': config.get('db_table', 'wareneingang'),
+        'sscc_column': config.get('sscc_column', 'SSCCs')
     }
     FTP_CONFIG = {
         'host': config.get('ftp_host', ''),
@@ -49,6 +50,8 @@ else:
         'user': 'root',
         'password': 'password',
         'database': 'homeassistant',
+        'table': 'wareneingang',
+        'sscc_column': 'SSCCs'
     }
     FTP_CONFIG = {
         'host': '',
@@ -79,7 +82,6 @@ def get_db_connection():
 
 @app.route("/")
 def index():
-    # Gibt die index.html zurück
     if not Path("/config/www/index.html").exists():
         logger.error("index.html nicht gefunden.")
         return jsonify({"error": "Index-Seite nicht gefunden"}), 404
@@ -105,18 +107,10 @@ def scan():
 
         try:
             with conn.cursor() as cursor:
-                sql = """
-                SELECT
-                  c.empf_name1        AS empfaenger,
-                  c.lieferend         AS zustelldatum,
-                  ci.quantity         AS collianzahl,
-                  o.name1             AS auftraggeber,
-                  ci.weight_kg        AS gewicht
-                FROM sscc s
-                JOIN consignment_items ci ON s.consignment_item_id = ci.id
-                JOIN consignments c       ON ci.consignment_id = c.id
-                JOIN orders o             ON c.order_id = o.id
-                WHERE s.code = %s
+                sql = f"""
+                SELECT *
+                FROM {DB_CONFIG['table']}
+                WHERE FIND_IN_SET(%s, REPLACE({DB_CONFIG['sscc_column']}, ', ', ',')) > 0
                 LIMIT 1
                 """
                 cursor.execute(sql, (barcode,))
@@ -129,14 +123,15 @@ def scan():
             return jsonify({"found": False, "barcode": barcode})
 
         logger.debug(f"Treffer für Barcode {barcode}")
+        # Passe ggf. die Feldnamen rechts auf die echten Tabellennamen an!
         return jsonify({
             "found": True,
             "barcode": barcode,
-            "empfaenger": row["empfaenger"],
-            "zustelldatum": row["zustelldatum"].strftime("%Y-%m-%d") if row["zustelldatum"] else "",
-            "collianzahl": row["collianzahl"],
-            "auftraggeber": row["auftraggeber"],
-            "gewicht": float(row["gewicht"]) if row["gewicht"] is not None else ""
+            "empfaenger": row.get("Empfaenger", ""),
+            "zustelldatum": row.get("LieferEnd", ""),
+            "collianzahl": row.get("Quantity", ""),
+            "auftraggeber": row.get("Auftraggeber", ""),
+            "gewicht": float(row["Gewicht"]) if row.get("Gewicht") is not None else ""
         })
 
     except Exception as e:
@@ -144,7 +139,6 @@ def scan():
         return jsonify({"error": "Serverfehler"}), 500
 
 def create_status_xml(sscc, status):
-    # Erzeuge Status-XML
     root = ET.Element("Status")
     ET.SubElement(root, "SSCC").text = sscc
     ET.SubElement(root, "Status").text = status
@@ -158,14 +152,13 @@ def create_status_xml(sscc, status):
     return filepath, filename
 
 def upload_ftp(filepath, filename):
-    # Übertrage Datei per FTPS (explizit TLS!)
     try:
         if not FTP_CONFIG["host"] or not FTP_CONFIG["user"] or not FTP_CONFIG["pass"]:
             logger.warning("FTP-Daten nicht vollständig konfiguriert.")
             return False, "FTP-Daten fehlen."
-        with FTP_TLS(FTP_CONFIG["host"]) as ftp:          # FTPS verwenden!
+        with FTP_TLS(FTP_CONFIG["host"]) as ftp:
             ftp.login(user=FTP_CONFIG["user"], passwd=FTP_CONFIG["pass"])
-            ftp.prot_p()                                 # Verschlüsselten Datentransfer aktivieren!
+            ftp.prot_p()
             ftp.cwd(FTP_CONFIG.get("dir", "/"))
             with open(filepath, "rb") as f:
                 ftp.storbinary(f"STOR {filename}", f)
@@ -177,7 +170,6 @@ def upload_ftp(filepath, filename):
 
 @app.route("/scan_status", methods=["POST"])
 def scan_status():
-    # Hallenscan-Modus: Status setzen, XML, FTP
     try:
         data = request.get_json(silent=True)
         sscc = data.get("sscc", "").strip()
@@ -193,7 +185,6 @@ def scan_status():
 
 @app.route("/set_status", methods=["POST"])
 def set_status():
-    # Manueller Modus: Status setzen, XML, FTP
     try:
         data = request.get_json(silent=True)
         sscc = data.get("sscc", "").strip()
