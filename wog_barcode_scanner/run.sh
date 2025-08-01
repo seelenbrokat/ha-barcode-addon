@@ -1,6 +1,7 @@
 #!/usr/bin/with-contenv bashio
 
 # Home Assistant Add-on run script
+
 # This script reads configuration options using bashio and starts
 # the Python web application. Environment variables are exported
 # so that the Python application can pick them up.
@@ -25,4 +26,5 @@ export SSCC_COLUMN
 export FTP_OUTPUT_DIR
 export STATUS_TO_SCAN
 
-python3 app/webapp.py
+# Starte webapp.py relativ zum Arbeitsverzeichnis
+python3 /app/app/webapp.py
