@@ -23,6 +23,8 @@
     .scanitem { padding: 0.5rem 0.5rem 0.5rem 0.7rem; border-bottom: 1px solid #eee; font-size: 0.87rem;}
     .scanitem.ok { color: #21b573;}
     .scanitem.fail { color: #e74c3c;}
+    .row { display: flex; gap: 0.6rem; }
+    .row > * { flex: 1; }
     @media (max-width:500px) {
       .container { padding: 0.6rem 0.02rem 0.8rem 0.02rem; }
       header { padding: 0.7rem 0.12rem 0.5rem 0.12rem; }
@@ -41,6 +43,16 @@
       <div class="tab active" id="tab-scan" onclick="switchTab('scan')">Scanner</div>
       <div class="tab" id="tab-hallen" onclick="switchTab('hallen')">Hallenscan</div>
       <div class="tab" id="tab-setstatus" onclick="switchTab('setstatus')">Status setzen</div>
+    </div>
+
+    <!-- Erweiterte Felder: User + Location -->
+    <div class="formrow row">
+      <select id="user-location" class="dropdown">
+        <option value="ikea halle">ikea halle</option>
+        <option value="pickup halle">pickup halle</option>
+        <option value="pickup feldkirch">pickup feldkirch</option>
+      </select>
+      <input type="text" id="user-field" value="3" style="max-width:110px;" placeholder="User">
     </div>
 
     <form id="form-scan" class="formrow" onsubmit="scanBarcode(event)">
@@ -115,6 +127,12 @@
       }
     }
 
+    function getUserLocation() {
+      const location = document.getElementById('user-location').value;
+      const user = document.getElementById('user-field').value;
+      return { location, user };
+    }
+
     function scanBarcode(event) {
       event.preventDefault();
       const input = document.getElementById('scan-barcode');
@@ -159,10 +177,11 @@
       const input = document.getElementById('hallen-barcode');
       const sscc = input.value.trim();
       const status = document.getElementById('hallen-status').value;
+      const { location, user } = getUserLocation();
       fetch(`${BASE}/scan_status`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ sscc, status })
+        body: JSON.stringify({ sscc, status, location, user })
       })
       .then(r => r.json()).then(data => {
         if(data.ok) {
@@ -186,10 +205,11 @@
       const input = document.getElementById('manual-barcode');
       const sscc = input.value.trim();
       const status = document.getElementById('manual-status').value;
+      const { location, user } = getUserLocation();
       fetch(`${BASE}/set_status`, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ sscc, status })
+        body: JSON.stringify({ sscc, status, location, user })
       })
       .then(r => r.json()).then(data => {
         if(data.ok) {
