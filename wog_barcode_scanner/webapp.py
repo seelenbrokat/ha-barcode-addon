@@ -2,6 +2,7 @@ import sys
 import logging
 import json
 import os
+import uuid
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from pathlib import Path
@@ -80,6 +81,82 @@ def get_db_connection():
         logger.error(f"DB-Verbindung fehlgeschlagen: {e}")
         return None
 
+# Mapping Status zu Number (kannst du beliebig anpassen)
+STATUS_MAPPING = {
+    "Hallenscan": "1",
+    "Wareneingang": "2",
+    "Warenausgang": "3",
+    "Retoure": "4"
+}
+
+def create_status_xml_full(sscc, status, user="3", location="ikea halle"):
+    # Hole OrderNumber und ConsignmentNumber aus der DB
+    order_nr, consignment_nr = "", ""
+    conn = get_db_connection()
+    try:
+        if conn:
+            with conn.cursor() as cursor:
+                sql = f"""
+                SELECT *
+                FROM {DB_CONFIG['table']}
+                WHERE FIND_IN_SET(%s, REPLACE({DB_CONFIG['sscc_column']}, ', ', ',')) > 0
+                LIMIT 1
+                """
+                cursor.execute(sql, (sscc,))
+                row = cursor.fetchone()
+                if row:
+                    order_nr = str(row.get("OrderNumber", ""))
+                    consignment_nr = str(row.get("ConsignmentNumber", ""))
+    finally:
+        if conn:
+            conn.close()
+
+    workflow = f"{order_nr}.{consignment_nr}" if order_nr and consignment_nr else ""
+    now = datetime.now()
+    status_time = now.strftime("%Y-%m-%dT%H:%M:%S")
+    send_date = status_time
+    export_ref = str(uuid.uuid4())
+
+    # XML im neuen Format:
+    ns = "http://soloplan.de/ssccimport.v1"
+    ET.register_namespace('', ns)
+    root = ET.Element(f"{{{ns}}}SsccCurrentData")
+
+    header = ET.SubElement(root, "Header")
+    ET.SubElement(header, "SendDate").text = send_date
+    ET.SubElement(header, "ExportItemReference").text = export_ref
+
+    current = ET.SubElement(root, "SsccCurrent")
+    ET.SubElement(current, "Sendungsnummer_Workflow").text = workflow
+    ET.SubElement(current, "StatusTime").text = status_time
+    ET.SubElement(current, "Number").text = STATUS_MAPPING.get(status, "1")
+    ET.SubElement(current, "Code").text = sscc
+    ET.SubElement(current, "Location").text = location
+    ET.SubElement(current, "User").text = user
+
+    filename = f"ssccstatus_{sscc}_{now.strftime('%Y%m%dT%H%M%S')}.xml"
+    filepath = os.path.join(XML_DIR, filename)
+    ET.ElementTree(root).write(filepath, encoding='utf-8', xml_declaration=True)
+    logger.debug(f"Status-XML erzeugt: {filepath}")
+    return filepath, filename
+
+def upload_ftp(filepath, filename):
+    try:
+        if not FTP_CONFIG["host"] or not FTP_CONFIG["user"] or not FTP_CONFIG["pass"]:
+            logger.warning("FTP-Daten nicht vollständig konfiguriert.")
+            return False, "FTP-Daten fehlen."
+        with FTP_TLS(FTP_CONFIG["host"]) as ftp:
+            ftp.login(user=FTP_CONFIG["user"], passwd=FTP_CONFIG["pass"])
+            ftp.prot_p()
+            ftp.cwd(FTP_CONFIG.get("dir", "/"))
+            with open(filepath, "rb") as f:
+                ftp.storbinary(f"STOR {filename}", f)
+        logger.info(f"Status-XML via FTPS übertragen: {filename}")
+        return True, "Übertragen"
+    except Exception as e:
+        logger.error(f"FTP-Fehler: {e}")
+        return False, str(e)
+
 @app.route("/")
 def index():
     if not Path("/config/www/index.html").exists():
@@ -138,45 +215,17 @@ def scan():
         logger.error(f"Fehler bei Scan: {e}", exc_info=True)
         return jsonify({"error": "Serverfehler"}), 500
 
-def create_status_xml(sscc, status):
-    root = ET.Element("Status")
-    ET.SubElement(root, "SSCC").text = sscc
-    ET.SubElement(root, "Status").text = status
-    timestamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-    ET.SubElement(root, "Timestamp").text = timestamp
-
-    filename = f"status_{sscc}_{datetime.now().strftime('%Y%m%dT%H%M%S')}.xml"
-    filepath = os.path.join(XML_DIR, filename)
-    ET.ElementTree(root).write(filepath, encoding='utf-8', xml_declaration=True)
-    logger.debug(f"Status-XML erzeugt: {filepath}")
-    return filepath, filename
-
-def upload_ftp(filepath, filename):
-    try:
-        if not FTP_CONFIG["host"] or not FTP_CONFIG["user"] or not FTP_CONFIG["pass"]:
-            logger.warning("FTP-Daten nicht vollständig konfiguriert.")
-            return False, "FTP-Daten fehlen."
-        with FTP_TLS(FTP_CONFIG["host"]) as ftp:
-            ftp.login(user=FTP_CONFIG["user"], passwd=FTP_CONFIG["pass"])
-            ftp.prot_p()
-            ftp.cwd(FTP_CONFIG.get("dir", "/"))
-            with open(filepath, "rb") as f:
-                ftp.storbinary(f"STOR {filename}", f)
-        logger.info(f"Status-XML via FTPS übertragen: {filename}")
-        return True, "Übertragen"
-    except Exception as e:
-        logger.error(f"FTP-Fehler: {e}")
-        return False, str(e)
-
 @app.route("/scan_status", methods=["POST"])
 def scan_status():
     try:
         data = request.get_json(silent=True)
         sscc = data.get("sscc", "").strip()
         status = data.get("status", "Hallenscan")
+        user = data.get("user", "3")
+        location = data.get("location", "ikea halle")
         if not sscc:
             return jsonify({"ok": False, "error": "Kein SSCC übergeben"})
-        filepath, filename = create_status_xml(sscc, status)
+        filepath, filename = create_status_xml_full(sscc, status, user, location)
         ok, msg = upload_ftp(filepath, filename)
         return jsonify({"ok": ok, "error": None if ok else msg})
     except Exception as e:
@@ -189,9 +238,11 @@ def set_status():
         data = request.get_json(silent=True)
         sscc = data.get("sscc", "").strip()
         status = data.get("status", "Hallenscan")
+        user = data.get("user", "3")
+        location = data.get("location", "ikea halle")
         if not sscc:
             return jsonify({"ok": False, "error": "Kein SSCC übergeben"})
-        filepath, filename = create_status_xml(sscc, status)
+        filepath, filename = create_status_xml_full(sscc, status, user, location)
         ok, msg = upload_ftp(filepath, filename)
         return jsonify({"ok": ok, "error": None if ok else msg})
     except Exception as e:
