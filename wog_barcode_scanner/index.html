@@ -172,6 +172,7 @@
       });
     }
 
+    // Gefixte Version: Feedback erscheint immer, auch bei Fehlern!
     function scanStatus(event) {
       event.preventDefault();
       const input = document.getElementById('hallen-barcode');
@@ -184,12 +185,17 @@
         body: JSON.stringify({ sscc, status, location, user })
       })
       .then(r => r.json()).then(data => {
-        if(data.ok) {
-          feedback("Status übertragen: " + sscc + " ("+status+")", true);
-          addScan(sscc, status, true, "");
+        if(data && typeof data.ok !== "undefined") {
+          if(data.ok) {
+            feedback("Status übertragen: " + sscc + " ("+status+")", true);
+            addScan(sscc, status, true, "");
+          } else {
+            feedback("Fehler beim Übertragen: " + (data.error || ""), false);
+            addScan(sscc, status, false, data.error || "");
+          }
         } else {
-          feedback("Fehler beim Übertragen: " + (data.error || ""), false);
-          addScan(sscc, status, false, data.error || "");
+          feedback("Unerwartete Antwort vom Server.", false);
+          addScan(sscc, status, false, "Unerwartete Serverantwort");
         }
         input.value = "";
         input.focus();
@@ -200,6 +206,7 @@
       });
     }
 
+    // Gefixte Version: Feedback erscheint immer, auch bei Fehlern!
     function setManualStatus(event) {
       event.preventDefault();
       const input = document.getElementById('manual-barcode');
@@ -212,12 +219,17 @@
         body: JSON.stringify({ sscc, status, location, user })
       })
       .then(r => r.json()).then(data => {
-        if(data.ok) {
-          feedback("Status gesetzt: " + sscc + " ("+status+")", true);
-          addScan(sscc, status, true, "");
+        if(data && typeof data.ok !== "undefined") {
+          if(data.ok) {
+            feedback("Status gesetzt: " + sscc + " ("+status+")", true);
+            addScan(sscc, status, true, "");
+          } else {
+            feedback("Fehler beim Setzen: " + (data.error || ""), false);
+            addScan(sscc, status, false, data.error || "");
+          }
         } else {
-          feedback("Fehler beim Setzen: " + (data.error || ""), false);
-          addScan(sscc, status, false, data.error || "");
+          feedback("Unerwartete Antwort vom Server.", false);
+          addScan(sscc, status, false, "Unerwartete Serverantwort");
         }
         input.value = "";
         input.focus();
