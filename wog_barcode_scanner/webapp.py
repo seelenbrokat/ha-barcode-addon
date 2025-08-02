@@ -2,6 +2,7 @@ import sys
 import logging
 import json
 import os
+import uuid
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from pathlib import Path
@@ -10,7 +11,6 @@ from datetime import datetime
 import xml.etree.ElementTree as ET
 from ftplib import FTP_TLS
 
-# Logging explizit auf stdout für Home Assistant Add-on!
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s %(levelname)s %(message)s",
@@ -80,72 +80,61 @@ def get_db_connection():
         logger.error(f"DB-Verbindung fehlgeschlagen: {e}")
         return None
 
-@app.route("/")
-def index():
-    if not Path("/config/www/index.html").exists():
-        logger.error("index.html nicht gefunden.")
-        return jsonify({"error": "Index-Seite nicht gefunden"}), 404
-    return send_from_directory('/config/www', "index.html")
+# Mapping Status zu Number
+STATUS_MAPPING = {
+    "Hallenscan": "1",
+    "Wareneingang": "2",
+    "Warenausgang": "3",
+    "Retoure": "4"
+}
 
-@app.route("/scan", methods=["POST"])
-def scan():
+def create_sscc_xml(sscc, status, user, location):
+    # Holt OrderNumber & ConsignmentNumber
+    conn = get_db_connection()
+    order_nr, consignment_nr = "", ""
     try:
-        data = request.get_json(silent=True)
-        if data is None:
-            logger.warning("Ungültiges JSON-Format.")
-            return jsonify({"error": "Ungültiges JSON-Format"}), 400
-        barcode = data.get("barcode", "").strip()
-        logger.debug(f"Barcode empfangen: {barcode}")
-        if not barcode:
-            logger.warning("Kein Barcode im Request.")
-            return jsonify({"error": "Barcode fehlt"}), 400
-
-        conn = get_db_connection()
-        if not conn:
-            logger.error("Fehler: Keine DB-Verbindung bei Scan!")
-            return jsonify({"error": "Keine DB-Verbindung"}), 500
-
-        try:
+        if conn:
             with conn.cursor() as cursor:
                 sql = f"""
-                SELECT *
-                FROM {DB_CONFIG['table']}
-                WHERE FIND_IN_SET(%s, REPLACE({DB_CONFIG['sscc_column']}, ', ', ',')) > 0
-                LIMIT 1
+                    SELECT *
+                    FROM {DB_CONFIG['table']}
+                    WHERE FIND_IN_SET(%s, REPLACE({DB_CONFIG['sscc_column']}, ', ', ',')) > 0
+                    LIMIT 1
                 """
-                cursor.execute(sql, (barcode,))
+                cursor.execute(sql, (sscc,))
                 row = cursor.fetchone()
-        finally:
+                if row:
+                    order_nr = str(row.get("OrderNumber", ""))
+                    consignment_nr = str(row.get("ConsignmentNumber", ""))
+    finally:
+        if conn:
             conn.close()
 
-        if not row:
-            logger.info(f"Kein Treffer für Barcode {barcode}")
-            return jsonify({"found": False, "barcode": barcode})
+    workflow_num = f"{order_nr}.{consignment_nr}" if order_nr and consignment_nr else ""
+    now = datetime.now()
+    status_time = now.strftime("%Y-%m-%dT%H:%M:%S")
+    send_date = status_time
+    export_ref = str(uuid.uuid4())
 
-        logger.debug(f"Treffer für Barcode {barcode}")
-        # Passe ggf. die Feldnamen rechts auf die echten Tabellennamen an!
-        return jsonify({
-            "found": True,
-            "barcode": barcode,
-            "empfaenger": row.get("Empfaenger", ""),
-            "zustelldatum": row.get("LieferEnd", ""),
-            "collianzahl": row.get("Quantity", ""),
-            "auftraggeber": row.get("Auftraggeber", ""),
-            "gewicht": float(row["Gewicht"]) if row.get("Gewicht") is not None else ""
-        })
+    ns = "http://soloplan.de/ssccimport.v1"
+    ET.register_namespace('', ns)
+    root = ET.Element(f"{{{ns}}}SsccCurrentData")
 
-    except Exception as e:
-        logger.error(f"Fehler bei Scan: {e}", exc_info=True)
-        return jsonify({"error": "Serverfehler"}), 500
+    # Header
+    header = ET.SubElement(root, "Header")
+    ET.SubElement(header, "SendDate").text = send_date
+    ET.SubElement(header, "ExportItemReference").text = export_ref
 
-def create_status_xml(sscc, status):
-    root = ET.Element("Status")
-    ET.SubElement(root, "SSCC").text = sscc
-    ET.SubElement(root, "Status").text = status
-    timestamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-    ET.SubElement(root, "Timestamp").text = timestamp
+    # SsccCurrent
+    sc = ET.SubElement(root, "SsccCurrent")
+    ET.SubElement(sc, "Sendungsnummer_Workflow").text = workflow_num
+    ET.SubElement(sc, "StatusTime").text = status_time
+    ET.SubElement(sc, "Number").text = STATUS_MAPPING.get(status, "1")
+    ET.SubElement(sc, "Code").text = sscc
+    ET.SubElement(sc, "Location").text = location
+    ET.SubElement(sc, "User").text = user
 
-    filename = f"status_{sscc}_{datetime.now().strftime('%Y%m%dT%H%M%S')}.xml"
+    filename = f"ssccstatus_{sscc}_{now.strftime('%Y%m%dT%H%M%S')}.xml"
     filepath = os.path.join(XML_DIR, filename)
     ET.ElementTree(root).write(filepath, encoding='utf-8', xml_declaration=True)
     logger.debug(f"Status-XML erzeugt: {filepath}")
@@ -174,9 +163,11 @@ def scan_status():
         data = request.get_json(silent=True)
         sscc = data.get("sscc", "").strip()
         status = data.get("status", "Hallenscan")
+        user = data.get("user", "3")
+        location = data.get("location", "ikea halle")
         if not sscc:
             return jsonify({"ok": False, "error": "Kein SSCC übergeben"})
-        filepath, filename = create_status_xml(sscc, status)
+        filepath, filename = create_sscc_xml(sscc, status, user, location)
         ok, msg = upload_ftp(filepath, filename)
         return jsonify({"ok": ok, "error": None if ok else msg})
     except Exception as e:
@@ -189,9 +180,11 @@ def set_status():
         data = request.get_json(silent=True)
         sscc = data.get("sscc", "").strip()
         status = data.get("status", "Hallenscan")
+        user = data.get("user", "3")
+        location = data.get("location", "ikea halle")
         if not sscc:
             return jsonify({"ok": False, "error": "Kein SSCC übergeben"})
-        filepath, filename = create_status_xml(sscc, status)
+        filepath, filename = create_sscc_xml(sscc, status, user, location)
         ok, msg = upload_ftp(filepath, filename)
         return jsonify({"ok": ok, "error": None if ok else msg})
     except Exception as e:
