@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8">
-  <title>WOG Barcode App</title>
+  <title>WOG SCANN APP App</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     body { font-family: system-ui,sans-serif; background: #f3f9f4; margin: 0; }
@@ -48,9 +48,11 @@
 
     <div class="formrow row">
       <select id="user-location" class="dropdown" style="max-width:150px;">
-        <option value="ikea halle">ikea halle</option>
-        <option value="pickup halle">pickup halle</option>
-        <option value="pickup feldkirch">pickup feldkirch</option>
+        <option value="ikea halle">Radetzkystrasse</option>
+        <option value="otten">Otten A14-A15//</option>
+        <option value="pickup hohenems">Pickup Hohenems</option>
+        <option value="pickup feldkirch">Pickup Feldkirch</option>
+        <option value="wog diepoldsau">WOG Diepoldsau</option>
       </select>
       <input type="text" id="user-field" value="3" style="max-width:65px;" placeholder="User">
     </div>
@@ -64,9 +66,9 @@
     <form id="form-hallen" class="formrow" style="display:none;" onsubmit="scanStatus(event)">
       <select id="hallen-status" class="dropdown">
         <option>Hallenscan</option>
-        <option>Wareneingang</option>
-        <option>Warenausgang</option>
-        <option>Retoure</option>
+        <option>Received at Hub</option>
+        <option>Received at Pickuppoint</option>
+        <option>Return to store</option>
       </select>
       <input type="text" id="hallen-barcode" placeholder="Barcode/SSCC eingeben oder scannen" autocomplete="off" required>
       <button class="bigscan" type="submit">Hallenscan</button>
@@ -145,7 +147,7 @@
       .then(r => r.json()).then(data => {
         if(data.found === false) {
           feedback("Kein Treffer: " + barcode, false);
-          addScan(barcode, "Scanner", false, "Nicht gefunden");
+          addScan(barcode, "Scanner:", false, "Sendung nicht gefunden");
         } else if(data.found === true) {
           let infos = "";
           if (data.empfaenger || data.zustelldatum || data.collianzahl) {
@@ -166,6 +168,7 @@
         window.lastScanValue = null;
       }).catch(e => {
         feedback("Serverfehler!", false);
+        addScan(barcode, "Scanner", false, "Serverfehler");
         input.value = "";
         input.focus();
         window.lastScanValue = null;
@@ -183,7 +186,8 @@
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ sscc, status, location, user })
       })
-      .then(r => r.json()).then(data => {
+      .then(r => r.json())
+      .then(data => {
         if(data && typeof data.ok !== "undefined") {
           if(data.ok) {
             feedback("Status übertragen: " + sscc + " ("+status+")", true);
@@ -198,8 +202,10 @@
         }
         input.value = "";
         input.focus();
-      }).catch(e => {
+      })
+      .catch(e => {
         feedback("Serverfehler!", false);
+        addScan(sscc, status, false, "Serverfehler");
         input.value = "";
         input.focus();
       });
@@ -216,7 +222,8 @@
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ sscc, status, location, user })
       })
-      .then(r => r.json()).then(data => {
+      .then(r => r.json())
+      .then(data => {
         if(data && typeof data.ok !== "undefined") {
           if(data.ok) {
             feedback("Status gesetzt: " + sscc + " ("+status+")", true);
@@ -231,8 +238,10 @@
         }
         input.value = "";
         input.focus();
-      }).catch(e => {
+      })
+      .catch(e => {
         feedback("Serverfehler!", false);
+        addScan(sscc, status, false, "Serverfehler");
         input.value = "";
         input.focus();
       });
