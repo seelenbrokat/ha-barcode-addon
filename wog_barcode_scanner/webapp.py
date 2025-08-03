@@ -204,7 +204,7 @@ def scan():
         return jsonify({
             "found": True,
             "barcode": barcode,
-            "empfaenger": row.get("Recipent", ""),
+            "empfaenger": row.get("Recipient", ""),
             "zustelldatum": row.get("LieferEnd", ""),
             "collianzahl": row.get("Quantity", ""),
             "auftraggeber": row.get("SupplierName1", ""),
