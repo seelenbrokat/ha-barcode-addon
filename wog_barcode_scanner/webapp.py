@@ -83,10 +83,10 @@ def get_db_connection():
 
 # Mapping Status zu Number (kannst du beliebig anpassen)
 STATUS_MAPPING = {
-    "Hallenscan": "1",
-    "Wareneingang": "2",
-    "Warenausgang": "3",
-    "Retoure": "4"
+    "Hallenscan": "39",
+    "Received at Hub": "33",
+    "Received at PuP": "38",
+    "Returned to Store": "47"
 }
 
 def create_status_xml_full(sscc, status, user="3", location="ikea halle"):
