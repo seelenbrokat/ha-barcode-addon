@@ -204,10 +204,10 @@ def scan():
         return jsonify({
             "found": True,
             "barcode": barcode,
-            "empfaenger": row.get("Empfaenger", ""),
+            "empfaenger": row.get("Recipent", ""),
             "zustelldatum": row.get("LieferEnd", ""),
             "collianzahl": row.get("Quantity", ""),
-            "auftraggeber": row.get("Auftraggeber", ""),
+            "auftraggeber": row.get("SupplierName1", ""),
             "gewicht": float(row["Gewicht"]) if row.get("Gewicht") is not None else ""
         })
 
