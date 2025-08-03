@@ -43,7 +43,7 @@
     <div class="tabs">
       <div class="tab active" id="tab-scan" onclick="switchTab('scan')">Scanner</div>
       <div class="tab" id="tab-hallen" onclick="switchTab('hallen')">Hallenscan</div>
-      <div class="tab" id="tab-setstatus" onclick="switchTab('setstatus')">Status setzen</div>
+      <div class="tab" id="tab-setstatus" onclick="switchTab('setstatus')">Einzelstatus setzen</div>
     </div>
 
     <div class="formrow row">
@@ -67,8 +67,8 @@
       <select id="hallen-status" class="dropdown">
         <option>Hallenscan</option>
         <option>Received at Hub</option>
-        <option>Received at Pickuppoint</option>
-        <option>Return to store</option>
+        <option>Received at PuP</option>
+        <option>Returned to Store</option>
       </select>
       <input type="text" id="hallen-barcode" placeholder="Barcode/SSCC eingeben oder scannen" autocomplete="off" required>
       <button class="bigscan" type="submit">Hallenscan</button>
@@ -78,9 +78,9 @@
       <input type="text" id="manual-barcode" placeholder="SSCC eingeben" autocomplete="off" required>
       <select id="manual-status" class="dropdown">
         <option>Hallenscan</option>
-        <option>Wareneingang</option>
-        <option>Warenausgang</option>
-        <option>Retoure</option>
+        <option>Received at Hub</option>
+        <option>Received at PuP</option>
+        <option>Returned to Store</option>
       </select>
       <button class="bigscan" type="submit">Status setzen</button>
     </form>
