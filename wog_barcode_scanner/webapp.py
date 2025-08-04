@@ -131,8 +131,8 @@ def create_status_xml_full(sscc, status, user="3", location="ikea halle"):
     ET.SubElement(current, "StatusTime").text = status_time
     ET.SubElement(current, "Number").text = STATUS_MAPPING.get(status, "1")
     ET.SubElement(current, "Code").text = sscc
-    ET.SubElement(current, "Location").text = location
-    ET.SubElement(current, "User").text = user
+    #ET.SubElement(current, "ScanLocation").text = location
+    #ET.SubElement(current, "User").text = user
 
     filename = f"ssccstatus_{sscc}_{now.strftime('%Y%m%dT%H%M%S')}.xml"
     filepath = os.path.join(XML_DIR, filename)
