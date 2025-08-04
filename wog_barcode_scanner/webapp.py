@@ -84,10 +84,10 @@ def get_db_connection():
         return None
 
 STATUS_MAPPING = {
-    "Hallenscan": "39",
-    "Received at Hub": "33",
-    "Received at PuP": "38",
-    "Returned to Store": "47"
+    "Hallenscan": "46",
+    "Received at Hub": "13",
+    "Received at PuP": "35",
+    "Returned to Store": "17"
 }
 
 def create_status_xml_full(sscc, status, user="3", location="ikea halle"):
