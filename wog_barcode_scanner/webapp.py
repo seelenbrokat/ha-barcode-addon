@@ -42,6 +42,7 @@ if os.path.exists(CONFIG_FILE):
         'dir': config.get('ftp_dir', '/')
     }
     XML_DIR = config.get('xml_dir', '/share/barcode_status_xml/')
+    FTP_ENABLED = config.get('ftp_enabled', True)
     logger.debug("Konfiguration aus /data/options.json geladen.")
 else:
     logger.warning("Keine Konfigurationsdatei gefunden. Verwende Standardwerte.")
@@ -61,6 +62,7 @@ else:
         'dir': '/'
     }
     XML_DIR = '/share/barcode_status_xml/'
+    FTP_ENABLED = True
 
 os.makedirs(XML_DIR, exist_ok=True)
 
@@ -81,7 +83,6 @@ def get_db_connection():
         logger.error(f"DB-Verbindung fehlgeschlagen: {e}")
         return None
 
-# Mapping Status zu Number (kannst du beliebig anpassen)
 STATUS_MAPPING = {
     "Hallenscan": "39",
     "Received at Hub": "33",
@@ -90,7 +91,6 @@ STATUS_MAPPING = {
 }
 
 def create_status_xml_full(sscc, status, user="3", location="ikea halle"):
-    # Hole OrderNumber und ConsignmentNumber aus der DB
     order_nr, consignment_nr = "", ""
     conn = get_db_connection()
     try:
@@ -117,7 +117,6 @@ def create_status_xml_full(sscc, status, user="3", location="ikea halle"):
     send_date = status_time
     export_ref = str(uuid.uuid4())
 
-    # XML im neuen Format:
     ns = "http://soloplan.de/ssccimport.v1"
     ET.register_namespace('', ns)
     root = ET.Element(f"{{{ns}}}SsccCurrentData")
@@ -131,8 +130,6 @@ def create_status_xml_full(sscc, status, user="3", location="ikea halle"):
     ET.SubElement(current, "StatusTime").text = status_time
     ET.SubElement(current, "Number").text = STATUS_MAPPING.get(status, "1")
     ET.SubElement(current, "Code").text = sscc
-    #ET.SubElement(current, "ScanLocation").text = location
-    #ET.SubElement(current, "User").text = user
 
     filename = f"ssccstatus_{sscc}_{now.strftime('%Y%m%dT%H%M%S')}.xml"
     filepath = os.path.join(XML_DIR, filename)
@@ -200,7 +197,6 @@ def scan():
             return jsonify({"found": False, "barcode": barcode})
 
         logger.debug(f"Treffer für Barcode {barcode}")
-        # Passe ggf. die Feldnamen rechts auf die echten Tabellennamen an!
         return jsonify({
             "found": True,
             "barcode": barcode,
@@ -226,7 +222,10 @@ def scan_status():
         if not sscc:
             return jsonify({"ok": False, "error": "Kein SSCC übergeben"})
         filepath, filename = create_status_xml_full(sscc, status, user, location)
-        ok, msg = upload_ftp(filepath, filename)
+        if FTP_ENABLED:
+            ok, msg = upload_ftp(filepath, filename)
+        else:
+            ok, msg = True, "XML erzeugt"
         return jsonify({"ok": ok, "error": None if ok else msg})
     except Exception as e:
         logger.error(f"Fehler in /scan_status: {e}")
@@ -243,7 +242,10 @@ def set_status():
         if not sscc:
             return jsonify({"ok": False, "error": "Kein SSCC übergeben"})
         filepath, filename = create_status_xml_full(sscc, status, user, location)
-        ok, msg = upload_ftp(filepath, filename)
+        if FTP_ENABLED:
+            ok, msg = upload_ftp(filepath, filename)
+        else:
+            ok, msg = True, "XML erzeugt"
         return jsonify({"ok": ok, "error": None if ok else msg})
     except Exception as e:
         logger.error(f"Fehler in /set_status: {e}")
